@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * collect.js — Fetch yesterday's YouTube videos using yt-dlp
- * Reads: config/channels.txt, config/keywords.txt
- * Writes: tmp/raw-YYYY-MM-DD.json
+ * collect.js — Fetch recent YouTube videos using yt-dlp
+ * Usage: node scripts/collect.js [--days N]
+ *   --days 1  (default) → yesterday only → tmp/raw-YYYY-MM-DD.json
+ *   --days 7            → last 7 days   → tmp/raw-YYYY-MM-DD_to_YYYY-MM-DD.json
  */
 
 import { spawnSync } from 'child_process';
@@ -13,16 +14,25 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 
-// Yesterday's date
-const yesterday = new Date();
-yesterday.setDate(yesterday.getDate() - 1);
-const dateStr = yesterday.toISOString().split('T')[0]; // YYYY-MM-DD
-const ytdlpDate = dateStr.replace(/-/g, '');           // YYYYMMDD
+// Args
+const argv = process.argv.slice(2);
+const daysIdx = argv.indexOf('--days');
+const days = daysIdx >= 0 ? Math.max(1, parseInt(argv[daysIdx + 1], 10) || 1) : 1;
+
+// Date range: yesterday back to (yesterday - days + 1)
+const endDate = new Date();
+endDate.setDate(endDate.getDate() - 1);
+const startDate = new Date(endDate);
+startDate.setDate(startDate.getDate() - (days - 1));
+
+const endStr = endDate.toISOString().split('T')[0];
+const startStr = startDate.toISOString().split('T')[0];
+const key = days > 1 ? `${startStr}_to_${endStr}` : endStr;
 
 const channelsFile = path.join(ROOT, 'config', 'channels.txt');
 const keywordsFile = path.join(ROOT, 'config', 'keywords.txt');
 const tmpDir = path.join(ROOT, 'tmp');
-const outputFile = path.join(tmpDir, `raw-${dateStr}.json`);
+const outputFile = path.join(tmpDir, `raw-${key}.json`);
 
 fs.mkdirSync(tmpDir, { recursive: true });
 
@@ -34,19 +44,21 @@ const keywords = fs.existsSync(keywordsFile)
       .split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
   : [];
 
-console.log(`📅 Target date: ${dateStr}`);
+console.log(`📅 Range: ${startStr} → ${endStr} (${days} day${days > 1 ? 's' : ''})`);
 console.log(`📺 Channels: ${channels.length}`);
 console.log(`🔑 Keywords: ${keywords.length > 0 ? keywords.join(', ') : 'none (all videos)'}\n`);
 
-// Verify yt-dlp once upfront
 const ytdlpCheck = spawnSync('yt-dlp', ['--version'], { encoding: 'utf8' });
 if (ytdlpCheck.error || ytdlpCheck.status !== 0) {
   console.error('❌ yt-dlp not found in PATH. Install: https://github.com/yt-dlp/yt-dlp/releases');
   process.exit(1);
 }
 
+const startStrYtdlp = startStr.replace(/-/g, '');
+const endStrYtdlp = endStr.replace(/-/g, '');
+
 const results = [];
-const PLAYLIST_END = 10; // check most recent 10 videos per channel
+const PLAYLIST_END = Math.max(10, days * 5); // scan more videos when range is wider
 
 for (const channel of channels) {
   const handle = channel.startsWith('@') ? channel : `@${channel}`;
@@ -54,7 +66,6 @@ for (const channel of channels) {
 
   console.log(`Fetching ${handle}...`);
 
-  // Step 1: get last N video IDs (flat-playlist is fast)
   const listResult = spawnSync('yt-dlp', [
     '--flat-playlist',
     '--print', '%(id)s',
@@ -64,7 +75,7 @@ for (const channel of channels) {
   ], { encoding: 'utf8', timeout: 60000 });
 
   if (listResult.status !== 0) {
-    console.error(`  ❌ Failed to fetch channel: ${(listResult.stderr || '').split('\n')[0]}`);
+    console.error(`  ❌ Failed to fetch: ${(listResult.stderr || '').split('\n')[0]}`);
     continue;
   }
 
@@ -74,8 +85,7 @@ for (const channel of channels) {
     continue;
   }
 
-  // Step 2: for each video, get full metadata (with upload_date) and filter
-  let matchedYesterday = 0;
+  let matched = 0;
 
   for (const videoId of videoIds) {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
@@ -92,29 +102,28 @@ for (const channel of channels) {
     let video;
     try { video = JSON.parse(metaResult.stdout); } catch { continue; }
 
-    // Filter by upload date (yesterday only)
-    if (video.upload_date !== ytdlpDate) {
-      // The list is newest-first; once we see an older video, stop
-      if (video.upload_date && video.upload_date < ytdlpDate) break;
-      continue;
-    }
+    const uploadDate = video.upload_date; // YYYYMMDD
 
-    matchedYesterday++;
+    // Stop scanning once we go before the start date (videos are newest-first)
+    if (uploadDate && uploadDate < startStrYtdlp) break;
+    // Skip if outside range (newer than end date — shouldn't happen but safety)
+    if (uploadDate && uploadDate > endStrYtdlp) continue;
+    if (!uploadDate) continue;
 
-    // Keyword filter
+    matched++;
+
     if (keywords.length > 0) {
       const titleLower = (video.title || '').toLowerCase();
       const descLower = (video.description || '').toLowerCase();
-      const matched = keywords.some(kw =>
+      const ok = keywords.some(kw =>
         titleLower.includes(kw.toLowerCase()) || descLower.includes(kw.toLowerCase())
       );
-      if (!matched) {
-        console.log(`  ⏭️  Skipped (no keyword match): ${video.title}`);
+      if (!ok) {
+        console.log(`  ⏭️  Skipped (no keyword): ${video.title}`);
         continue;
       }
     }
 
-    // Step 3: get transcript
     let transcript = '';
     let hasTranscript = false;
 
@@ -136,23 +145,25 @@ for (const channel of channels) {
       vttFiles.forEach(f => fs.unlinkSync(path.join(tmpDir, f)));
     }
 
+    const uploadDateStr = `${uploadDate.slice(0,4)}-${uploadDate.slice(4,6)}-${uploadDate.slice(6,8)}`;
+
     results.push({
       channel: handle,
       videoId,
       title: video.title || 'Untitled',
       views: video.view_count || 0,
-      uploadDate: dateStr,
+      uploadDate: uploadDateStr,
       duration: video.duration || 0,
       transcript: transcript || video.description || '',
       description: video.description || '',
       hasTranscript
     });
 
-    console.log(`  📝 ${video.title} [${hasTranscript ? 'transcript' : 'desc only'}]`);
+    console.log(`  📝 [${uploadDateStr}] ${video.title} ${hasTranscript ? '' : '(desc only)'}`);
   }
 
-  if (matchedYesterday === 0) {
-    console.log(`  ⏭️  No videos uploaded on ${dateStr}`);
+  if (matched === 0) {
+    console.log(`  ⏭️  No videos in range`);
   }
 }
 

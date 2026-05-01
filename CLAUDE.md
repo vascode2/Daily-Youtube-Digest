@@ -15,23 +15,33 @@ Automatically collect, summarize, and publish YouTube video summaries from watch
 3. **Review** (Node script) — Validates structure and auto-fixes formatting
 4. **Publish** (Node script) — Saves to `output/YYYY-MM-DD.md` and optionally Notion
 
-## Trigger Phrase
+## Trigger Phrases
 
-When the user says **"어제 거 요약해 줘"**, **"run digest"**, or **"daily digest"**, execute this exact sequence:
+### Daily — "어제 거 요약해 줘" / "daily digest" / "run digest"
+Yesterday only. Use `npm run collect` (single day).
+
+### Weekly — "지난 일주일 요약해 줘" / "weekly digest" / "지난 7일"
+Last 7 days. Use `npm run collect:week` instead of `npm run collect`. Everything else is identical — review.js and publish.js auto-detect the latest tmp file. Notion title is auto-formatted as "Weekly Digest".
+
+When the trigger fires, execute this sequence:
 
 ### Step 1: Collect
 ```bash
-npm run collect
+npm run collect           # daily (yesterday)
+# or
+npm run collect:week      # weekly (last 7 days)
 ```
-This creates `tmp/raw-YYYY-MM-DD.json` with yesterday's videos.
+Creates `tmp/raw-{key}.json` where key is either `YYYY-MM-DD` or `YYYY-MM-DD_to_YYYY-MM-DD`.
 
 ### Step 2: Summarize (you do this — no API call)
-1. Read `tmp/raw-YYYY-MM-DD.json`
+1. Read the newly created `tmp/raw-{key}.json` (the only raw-*.json file in tmp)
 2. Read `config/format.md` for the required output format
 3. Read `agents/summarizer.md` for tone and audience guidance
 4. For each video, write a summary in the exact format from `config/format.md`
 5. Group summaries by channel under `## @channelhandle` headings
-6. Write the result to `tmp/summaries-YYYY-MM-DD.md` with header `# YouTube Digest — YYYY-MM-DD`
+   - For weekly: optionally subgroup videos by upload date within each channel
+6. Write to `tmp/summaries-{key}.md` (same key as the raw file).
+   Header: `# YouTube Digest — {key}` (the publish step rewrites this header)
 
 ### Step 3: Review
 ```bash

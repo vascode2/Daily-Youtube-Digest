@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 /**
- * review.js — Quality check and auto-fix summaries
- * Reads: tmp/summaries-YYYY-MM-DD.md, tmp/raw-YYYY-MM-DD.json
- * Writes: tmp/review-report-YYYY-MM-DD.json, modifies summaries file in-place
+ * review.js — Quality check and auto-fix the most recent summaries file in tmp/
  */
 
 import fs from 'fs';
@@ -11,28 +9,27 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
+const tmpDir = path.join(ROOT, 'tmp');
 
-const dateStr = getYesterdayStr();
-const summariesFile = path.join(ROOT, 'tmp', `summaries-${dateStr}.md`);
-const rawFile = path.join(ROOT, 'tmp', `raw-${dateStr}.json`);
-const reportFile = path.join(ROOT, 'tmp', `review-report-${dateStr}.json`);
-
-if (!fs.existsSync(summariesFile)) {
-  console.error(`❌ No summaries found: ${summariesFile}\nRun summarize.js first.`);
+const summariesFile = findLatestSummaries(tmpDir);
+if (!summariesFile) {
+  console.error(`❌ No summaries-*.md found in ${tmpDir}`);
   process.exit(1);
 }
 
+const key = path.basename(summariesFile).replace(/^summaries-/, '').replace(/\.md$/, '');
+const reportFile = path.join(tmpDir, `review-report-${key}.json`);
+
+console.log(`🔍 Reviewing: ${path.basename(summariesFile)}\n`);
+
 let content = fs.readFileSync(summariesFile, 'utf8');
-const rawVideos = fs.existsSync(rawFile) ? JSON.parse(fs.readFileSync(rawFile, 'utf8')) : [];
 
 const issues = [];
 let errorCount = 0;
 let fixCount = 0;
 
-console.log('🔍 Reviewing summaries...\n');
-
-// Check 1: Required sections present
-const requiredSections = ['핵심 요약', '주요 타임라인', '한 줄 인사이트'];
+const alwaysRequired = ['핵심 요약', '한 줄 인사이트'];
+const transcriptOnlyRequired = ['주요 타임라인']; // only required when transcript is available
 // Split on standalone --- separators (not table separators like |---|)
 const videoBlocks = content.split(/\n---\s*\n/).filter(b => /^###\s/m.test(b));
 
@@ -41,26 +38,37 @@ for (const block of videoBlocks) {
   if (!titleMatch) continue;
   const title = titleMatch[1].trim();
 
-  for (const section of requiredSections) {
+  const hasTranscript = !/자막\s*\|\s*없음/.test(block);
+
+  for (const section of alwaysRequired) {
     if (!block.includes(section)) {
       issues.push({ level: 'ERROR', video: title, check: 'missing_section', detail: `Missing: ${section}` });
       errorCount++;
       console.log(`  ❌ ERROR: "${title}" — missing section: ${section}`);
     }
   }
+  for (const section of transcriptOnlyRequired) {
+    if (!block.includes(section)) {
+      const level = hasTranscript ? 'ERROR' : 'WARNING';
+      issues.push({ level, video: title, check: 'missing_section', detail: `Missing: ${section}` });
+      if (hasTranscript) {
+        errorCount++;
+        console.log(`  ❌ ERROR: "${title}" — missing section: ${section}`);
+      } else {
+        console.log(`  ⚠️  WARNING: "${title}" — missing section: ${section} (no transcript)`);
+      }
+    }
+  }
 
-  // Check 2: Timestamp format
   const timestamps = block.match(/\[\d+:\d+:\d+\]/g) || [];
-  const badTimestamps = block.match(/\[\d+:\d+\]/g) || []; // MM:SS instead of HH:MM:SS
+  const badTimestamps = block.match(/\[\d+:\d+\](?!:)/g) || [];
   if (badTimestamps.length > timestamps.length) {
-    // Auto-fix: convert MM:SS to HH:MM:SS
-    content = content.replace(/\[(\d+):(\d+)\]/g, (_, m, s) => `[00:${m.padStart(2,'0')}:${s.padStart(2,'0')}]`);
+    content = content.replace(/\[(\d+):(\d+)\](?!:)/g, (_, m, s) => `[00:${m.padStart(2,'0')}:${s.padStart(2,'0')}]`);
     issues.push({ level: 'WARNING', video: title, check: 'timestamp_format', detail: 'Auto-fixed MM:SS → HH:MM:SS', fixed: true });
     fixCount++;
     console.log(`  🔧 Fixed timestamp format in: "${title}"`);
   }
 
-  // Check 3: 한 줄 인사이트 length (should be 1 sentence)
   const insightMatch = block.match(/한 줄 인사이트[^\n]*\n(.*)/);
   if (insightMatch) {
     const insight = insightMatch[1].trim();
@@ -72,41 +80,36 @@ for (const block of videoBlocks) {
   }
 }
 
-// Check 4: Overall document structure
 if (!content.includes('## @')) {
   issues.push({ level: 'ERROR', check: 'structure', detail: 'No channel sections found (## @handle)' });
   errorCount++;
 }
 
-// Save fixed content
 fs.writeFileSync(summariesFile, content);
 
-// Save report
 const report = {
-  date: dateStr,
+  key,
   totalIssues: issues.length,
   errors: errorCount,
   warnings: issues.length - errorCount,
   autoFixed: fixCount,
   issues
 };
-
 fs.writeFileSync(reportFile, JSON.stringify(report, null, 2));
 
-console.log(`\n📊 Review Report:`);
-console.log(`   Issues: ${issues.length} (${errorCount} errors, ${issues.length - errorCount} warnings)`);
-console.log(`   Auto-fixed: ${fixCount}`);
-console.log(`   Report: ${reportFile}`);
+console.log(`\n📊 Review: ${issues.length} issues (${errorCount} errors, ${issues.length - errorCount} warnings), ${fixCount} auto-fixed`);
 
 if (errorCount > 0) {
-  console.error(`\n❌ ${errorCount} error(s) require manual attention.`);
+  console.error(`❌ ${errorCount} error(s) require manual attention.`);
   process.exit(1);
-} else {
-  console.log('\n✅ Review passed.');
 }
+console.log('✅ Review passed.');
 
-function getYesterdayStr() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().split('T')[0];
+function findLatestSummaries(dir) {
+  if (!fs.existsSync(dir)) return null;
+  const files = fs.readdirSync(dir)
+    .filter(f => f.startsWith('summaries-') && f.endsWith('.md'))
+    .map(f => ({ name: f, mtime: fs.statSync(path.join(dir, f)).mtimeMs }))
+    .sort((a, b) => b.mtime - a.mtime);
+  return files.length > 0 ? path.join(dir, files[0].name) : null;
 }
