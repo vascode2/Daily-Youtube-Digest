@@ -30,19 +30,40 @@ Topics of interest:
 ```markdown
 # YouTube Digest — YYYY-MM-DD
 
-## @channel-handle-1
+### 📺 @channel-handle-1
 
-### Video Title 1
-[follow config/format.md exactly]
+## [Video Title 1](https://www.youtube.com/watch?v=VIDEO_ID)
 
-### Video Title 2
-[follow config/format.md exactly]
+📅 YYYY-MM-DD
 
-## @channel-handle-2
+[핵심 요약 / 주요 타임라인 / 한 줄 인사이트 — see config/format.md]
 
-### Video Title 3
-[follow config/format.md exactly]
+---
+
+## [Video Title 2](https://www.youtube.com/watch?v=VIDEO_ID)
+
+📅 YYYY-MM-DD
+
+[...]
+
+---
+
+### 📺 @channel-handle-2
+
+## [Video Title 3](https://www.youtube.com/watch?v=VIDEO_ID)
+
+📅 YYYY-MM-DD
+
+[...]
+
+---
 ```
+
+**Heading levels matter:**
+- `#` document title (h1)
+- `###` channel handle (h3, less prominent)
+- `##` video title with link (h2, biggest — most prominent)
+- This makes video titles stand out, which is what users scan for
 
 ## Rules
 - One section per channel, one subsection per video

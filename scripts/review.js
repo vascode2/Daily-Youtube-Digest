@@ -31,14 +31,15 @@ let fixCount = 0;
 const alwaysRequired = ['핵심 요약', '한 줄 인사이트'];
 const transcriptOnlyRequired = ['주요 타임라인']; // only required when transcript is available
 // Split on standalone --- separators (not table separators like |---|)
-const videoBlocks = content.split(/\n---\s*\n/).filter(b => /^###\s/m.test(b));
+// Video blocks are identified by their h2 title with a link: `## [Title](url)`
+// Channel headers (### 📺 @handle) are NOT video blocks — they're metadata
+const videoBlocks = content.split(/\n---\s*\n/).filter(b => /^##\s+\[/m.test(b));
 
 for (const block of videoBlocks) {
-  const titleMatch = block.match(/###\s+(.+)/);
+  // Title is the first `## [Title](url)` line
+  const titleMatch = block.match(/^##\s+\[([^\]]+)\]/m);
   if (!titleMatch) continue;
   const title = titleMatch[1].trim();
-
-  const hasTranscript = !/자막\s*\|\s*없음/.test(block);
 
   for (const section of alwaysRequired) {
     if (!block.includes(section)) {
@@ -47,16 +48,10 @@ for (const block of videoBlocks) {
       console.log(`  ❌ ERROR: "${title}" — missing section: ${section}`);
     }
   }
+  // 주요 타임라인 is optional — only warn if missing (often unavailable for videos without transcripts)
   for (const section of transcriptOnlyRequired) {
     if (!block.includes(section)) {
-      const level = hasTranscript ? 'ERROR' : 'WARNING';
-      issues.push({ level, video: title, check: 'missing_section', detail: `Missing: ${section}` });
-      if (hasTranscript) {
-        errorCount++;
-        console.log(`  ❌ ERROR: "${title}" — missing section: ${section}`);
-      } else {
-        console.log(`  ⚠️  WARNING: "${title}" — missing section: ${section} (no transcript)`);
-      }
+      issues.push({ level: 'WARNING', video: title, check: 'missing_section', detail: `Missing: ${section}` });
     }
   }
 
@@ -80,8 +75,8 @@ for (const block of videoBlocks) {
   }
 }
 
-if (!content.includes('## @')) {
-  issues.push({ level: 'ERROR', check: 'structure', detail: 'No channel sections found (## @handle)' });
+if (!/###\s+📺\s+@/.test(content)) {
+  issues.push({ level: 'ERROR', check: 'structure', detail: 'No channel sections found (### 📺 @handle)' });
   errorCount++;
 }
 

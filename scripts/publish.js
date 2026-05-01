@@ -32,8 +32,9 @@ const timeStr = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-di
 const report = fs.existsSync(reportFile) ? JSON.parse(fs.readFileSync(reportFile, 'utf8')) : {};
 const summaries = fs.readFileSync(summariesFile, 'utf8');
 
-const channelCount = (summaries.match(/^## @/gm) || []).length;
-const videoCount = (summaries.match(/^### /gm) || []).length;
+// New format: channels are h3 with `### 📺 @handle`, videos are h2 with `## [Title](url)`
+const channelCount = (summaries.match(/^###\s+📺\s+@/gm) || []).length;
+const videoCount = (summaries.match(/^##\s+\[/gm) || []).length;
 
 const titleHeading = isRange
   ? `# 📺 YouTube Weekly Digest — ${formatDateKo(startStr)} ~ ${formatDateKo(endStr)}`
@@ -46,7 +47,12 @@ const header = `${titleHeading}
 ---
 `;
 
-const finalContent = header + summaries.replace(/^# YouTube.*\n\n/, '');
+// Strip any pre-existing top-level title and quote/stats line, plus an opening divider if present
+const stripped = summaries
+  .replace(/^#\s+[^\n]*\n+/, '')           // top H1 line
+  .replace(/^>\s+[^\n]*\n+/, '')           // optional quote/stats line
+  .replace(/^---\s*\n+/, '');              // optional divider
+const finalContent = header + stripped;
 fs.writeFileSync(outputFile, finalContent);
 console.log(`✅ Saved: ${outputFile}`);
 
@@ -208,19 +214,50 @@ function headingBlock(level, text) {
   return { object: 'block', type, [type]: { rich_text: parseRichText(text) } };
 }
 
+/**
+ * Parse markdown inline syntax into Notion rich_text array.
+ * Supports: [text](url) links, **bold**, plain text. Order-independent.
+ */
 function parseRichText(text) {
-  const parts = [];
-  const regex = /\*\*([^*]+)\*\*/g;
-  let lastIndex = 0;
+  // Tokenize: find all [text](url) and **bold** spans, fill the rest as plain.
+  const tokens = [];
+  const linkRe = /\[([^\]]+)\]\(([^)]+)\)/g;
+  const boldRe = /\*\*([^*]+)\*\*/g;
+  const matches = [];
   let m;
-  while ((m = regex.exec(text)) !== null) {
-    if (m.index > lastIndex) parts.push(plainSegment(text.slice(lastIndex, m.index)));
-    parts.push(boldSegment(m[1]));
-    lastIndex = regex.lastIndex;
+  while ((m = linkRe.exec(text)) !== null) {
+    matches.push({ start: m.index, end: m.index + m[0].length, kind: 'link', text: m[1], url: m[2] });
   }
-  if (lastIndex < text.length) parts.push(plainSegment(text.slice(lastIndex)));
-  return parts.length > 0 ? parts : [plainSegment(text)];
+  while ((m = boldRe.exec(text)) !== null) {
+    matches.push({ start: m.index, end: m.index + m[0].length, kind: 'bold', text: m[1] });
+  }
+  matches.sort((a, b) => a.start - b.start);
+
+  // Drop overlapping matches (keep first)
+  const filtered = [];
+  let lastEnd = 0;
+  for (const mt of matches) {
+    if (mt.start >= lastEnd) { filtered.push(mt); lastEnd = mt.end; }
+  }
+
+  let cursor = 0;
+  for (const mt of filtered) {
+    if (mt.start > cursor) tokens.push(plainSegment(text.slice(cursor, mt.start)));
+    if (mt.kind === 'link') tokens.push(linkSegment(mt.text, mt.url));
+    else if (mt.kind === 'bold') tokens.push(boldSegment(mt.text));
+    cursor = mt.end;
+  }
+  if (cursor < text.length) tokens.push(plainSegment(text.slice(cursor)));
+
+  return tokens.length > 0 ? tokens : [plainSegment(text)];
 }
 
-function plainSegment(t) { return { type: 'text', text: { content: t.slice(0, 2000) } }; }
-function boldSegment(t)  { return { type: 'text', text: { content: t.slice(0, 2000) }, annotations: { bold: true } }; }
+function plainSegment(t) {
+  return { type: 'text', text: { content: t.slice(0, 2000) } };
+}
+function boldSegment(t)  {
+  return { type: 'text', text: { content: t.slice(0, 2000) }, annotations: { bold: true } };
+}
+function linkSegment(t, url) {
+  return { type: 'text', text: { content: t.slice(0, 2000), link: { url } } };
+}
