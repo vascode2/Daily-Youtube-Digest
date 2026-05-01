@@ -1,0 +1,12 @@
+{
+  "name": "daily-youtube-digest",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Daily YouTube video digest generator using Claude Code (no API key required)",
+  "scripts": {
+    "collect": "node scripts/collect.js",
+    "review": "node scripts/review.js",
+    "publish": "node scripts/publish.js",
+    "test": "node tests/test-pipeline.js"
+  }
+}

@@ -1,0 +1,11 @@
+# YouTube channels to monitor
+# One handle per line. Lines starting with # are ignored.
+
+@careerhackeralex
+@dekilab
+@sv.developer
+@unrealtech
+@bitgapnam
+@Claudical
+@AI마스터_세인투
+@aiDotEngineer

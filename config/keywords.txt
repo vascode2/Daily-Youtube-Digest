@@ -1,0 +1,17 @@
+# Keyword filter (optional)
+# If any keywords are listed, only videos matching at least one keyword will be included.
+# Leave empty to include all videos from all channels.
+# Case-insensitive partial match.
+
+Wi-Fi 7
+LoRaWAN
+Bluetooth LE
+Matter
+Thread
+LTE-M
+NB-IoT
+DECT NR+
+module
+embedded
+IoT
+wireless

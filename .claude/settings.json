@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(npm:*)",
+      "Bash(yt-dlp:*)",
+      "Bash(node scripts/collect.js)",
+      "Bash(node scripts/summarize.js)",
+      "Bash(node scripts/review.js)",
+      "Bash(node scripts/publish.js)"
+    ]
+  }
+}
