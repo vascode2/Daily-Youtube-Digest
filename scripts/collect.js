@@ -36,6 +36,16 @@ const outputFile = path.join(tmpDir, `raw-${key}.json`);
 
 fs.mkdirSync(tmpDir, { recursive: true });
 
+// If YOUTUBE_COOKIES_B64 is set (from GitHub Secret in CI), decode to a temp file
+// so yt-dlp can use authenticated cookies and bypass anonymous-access restrictions.
+let cookiesFile = null;
+if (process.env.YOUTUBE_COOKIES_B64) {
+  cookiesFile = path.join(tmpDir, 'cookies.txt');
+  fs.writeFileSync(cookiesFile, Buffer.from(process.env.YOUTUBE_COOKIES_B64, 'base64'));
+  console.log(`🍪 Using YouTube cookies from env (${fs.statSync(cookiesFile).size} bytes)`);
+}
+const cookieArgs = cookiesFile ? ['--cookies', cookiesFile] : [];
+
 const channels = fs.readFileSync(channelsFile, 'utf8')
   .split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
 
@@ -67,6 +77,7 @@ for (const channel of channels) {
   console.log(`Fetching ${handle}...`);
 
   const listResult = spawnSync('yt-dlp', [
+    ...cookieArgs,
     '--flat-playlist',
     '--print', '%(id)s',
     '--playlist-end', String(PLAYLIST_END),
@@ -91,6 +102,7 @@ for (const channel of channels) {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
     const metaResult = spawnSync('yt-dlp', [
+      ...cookieArgs,
       '--dump-json',
       '--skip-download',
       '--no-warnings',
@@ -128,6 +140,7 @@ for (const channel of channels) {
     let hasTranscript = false;
 
     spawnSync('yt-dlp', [
+      ...cookieArgs,
       '--write-auto-sub',
       '--sub-lang', 'en,ko',
       '--sub-format', 'vtt',

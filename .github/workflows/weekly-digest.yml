@@ -20,16 +20,18 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install yt-dlp
+      - name: Install yt-dlp (latest GitHub release)
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq python3-pip
-          pip install --quiet yt-dlp
+          sudo curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+          sudo chmod a+rx /usr/local/bin/yt-dlp
+          yt-dlp --version
 
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
 
       - name: Collect last 7 days
+        env:
+          YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
         run: npm run collect:week
 
       - name: Summarize via Claude Code

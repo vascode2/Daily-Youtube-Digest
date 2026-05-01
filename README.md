@@ -1,57 +1,158 @@
 # Daily YouTube Digest
 
-매일 아침 구독 채널의 어제 업로드 영상을 자동으로 수집·요약·발행하는 Claude Code 워크플로우.
+Automatically collects, summarizes, and publishes daily/weekly digests from your YouTube subscription channels — with **no Anthropic API key required** (Claude Code itself does the summarization). Runs 24/7 on GitHub Actions and publishes to Notion.
 
-**Anthropic API 키가 필요 없습니다** — Claude Code 자체가 요약을 수행합니다.
+## Features
 
-## Requirements
+- 📺 Tracks N YouTube channels via [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+- 🤖 Summarization powered by Claude Code (no API key, uses your subscription via OAuth)
+- 📝 Notion integration: each digest becomes a child page under your designated parent
+- ⏰ GitHub Actions cron: daily (08:30 KST) and weekly (Mon 09:00 KST) — runs even when your computer is off
+- 🎨 Notion output: clickable video titles (h2), red channel headers, structured summaries
+- 🔍 Optional keyword filtering
 
-- [Node.js](https://nodejs.org) v22+
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp/releases) (PATH에 등록)
-- [Claude Code](https://docs.claude.com/en/docs/agents-and-tools/claude-code/overview) CLI
+## Architecture
 
-## Setup
-
-```bash
-git clone https://github.com/vascode2/Daily-Youtube-Digest.git
-cd Daily-Youtube-Digest
-npm install
-npm test          # 환경 검증
+```
+┌────────────────────────────────────────────────────────────┐
+│                  GitHub Actions (cron)                     │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 1. yt-dlp collect (with YouTube cookies)             │  │
+│  │ 2. Claude Code (--print mode, OAuth token)           │  │
+│  │ 3. review.js (validate format)                       │  │
+│  │ 4. publish.js (write output/, POST to Notion API)    │  │
+│  │ 5. git commit & push output back to repo             │  │
+│  └──────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────┘
 ```
 
-`config/channels.txt`에 모니터링할 YouTube 채널 핸들 추가.
-
-## Usage
-
-Claude Code 터미널에서:
-```
-어제 거 요약해 줘
-```
-
-Claude Code가 [CLAUDE.md](CLAUDE.md)를 따라 자동으로:
-1. `npm run collect` 실행 (yt-dlp로 어제 영상 수집)
-2. raw 데이터를 읽고 요약 작성 (`tmp/summaries-YYYY-MM-DD.md`)
-3. `npm run review` 실행 (품질 검증)
-4. `npm run publish` 실행 (`output/YYYY-MM-DD.md` 저장)
+CLAUDE.md tells Claude Code which files to read, what format to follow, and which sub-agent guides to consult (`agents/collector.md`, `agents/summarizer.md`, etc.).
 
 ## Project Structure
 
 ```
 .
-├── CLAUDE.md           # Claude Code 진입점
-├── agents/             # Sub-agent 지침
-├── config/             # 채널/포맷/키워드 설정
-├── scripts/            # collect / review / publish (Node)
-├── output/             # 최종 결과물 (날짜별 .md)
-└── tests/
+├── CLAUDE.md                      # Entry point read by Claude Code
+├── agents/                        # Sub-agent role definitions
+│   ├── collector.md
+│   ├── summarizer.md
+│   ├── reviewer.md
+│   └── publisher.md
+├── config/
+│   ├── channels.txt               # YouTube channels to monitor
+│   ├── format.md                  # Output format spec
+│   └── keywords.txt               # Optional keyword filter
+├── scripts/
+│   ├── collect.js                 # yt-dlp wrapper (Node)
+│   ├── review.js                  # Quality check on summaries
+│   └── publish.js                 # File output + Notion publish
+├── .github/workflows/
+│   ├── daily-digest.yml           # Cron: 23:30 UTC daily
+│   └── weekly-digest.yml          # Cron: Mon 00:00 UTC
+├── output/                        # Generated digest files (committed)
+└── tests/test-pipeline.js
 ```
 
-## Optional: Notion Publishing
+## Local Setup (optional, for development)
 
-`.env`에 `NOTION_TOKEN`, `NOTION_PAGE_ID` 설정 시 자동으로 Notion 페이지에도 발행됩니다.
+Requirements:
+- Node.js v22+
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp/releases) on PATH
+- [Claude Code CLI](https://docs.claude.com/en/docs/agents-and-tools/claude-code/overview)
 
-## Optional: Daily Schedule
+```bash
+git clone https://github.com/vascode2/Daily-Youtube-Digest.git
+cd Daily-Youtube-Digest
+npm install
+npm test                        # validate setup
+```
 
-Claude Desktop → Routines → Local Routine 생성:
-- Prompt: `"어제 거 요약해 줘"`
-- Time: 매일 08:30
+Then edit [config/channels.txt](config/channels.txt) and run Claude Code:
+```bash
+claude
+```
+Inside Claude Code:
+```
+어제 거 요약해 줘            # daily
+지난 일주일 요약해 줘         # weekly
+```
+
+For Notion publishing locally, create `.env`:
+```
+NOTION_TOKEN=ntn_...
+NOTION_PAGE_ID=...
+```
+
+## GitHub Actions Setup (24/7 automation)
+
+The workflows run on schedule even when your computer is off. Three secrets must be configured in [Settings → Secrets and variables → Actions](https://github.com/vascode2/Daily-Youtube-Digest/settings/secrets/actions):
+
+| Secret | How to get it |
+|---|---|
+| `CLAUDE_CODE_OAUTH_TOKEN` | Run `claude setup-token` locally, copy the `sk-ant-oat01-...` token from the terminal |
+| `NOTION_TOKEN` | Create an [Internal Integration](https://www.notion.so/my-integrations) and copy its secret (`ntn_...`). Share the parent page with the integration. |
+| `NOTION_PAGE_ID` | Open the parent Notion page → copy its 32-char ID from the URL |
+| `YOUTUBE_COOKIES_B64` | See "YouTube Cookies" below |
+
+### YouTube Cookies (required for cloud runners)
+
+YouTube increasingly blocks anonymous access from cloud IPs. To work around this, export cookies from your browser and store them as a base64-encoded GitHub Secret.
+
+1. Install the [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) Chrome extension
+2. Visit https://www.youtube.com (logged in)
+3. Click the extension → Export As → **Netscape format** → save `youtube.com_cookies.txt`
+4. Base64-encode the file:
+
+   PowerShell:
+   ```powershell
+   $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\Downloads\youtube.com_cookies.txt"))
+   Set-Clipboard -Value $b64
+   ```
+   Bash/macOS:
+   ```bash
+   base64 -w0 ~/Downloads/youtube.com_cookies.txt | pbcopy
+   ```
+5. Add as GitHub Secret `YOUTUBE_COOKIES_B64`
+
+⚠️ Cookies expire (typically 30–90 days). When jobs start failing, repeat steps 2–5 to refresh.
+
+### Triggering Manually
+
+Go to the [Actions tab](https://github.com/vascode2/Daily-Youtube-Digest/actions) → select a workflow → **Run workflow**.
+
+## Output Format
+
+Each video produces:
+```markdown
+## [Video Title](https://www.youtube.com/watch?v=VIDEO_ID)
+
+**핵심 요약**
+> 2-4 sentence summary
+
+**주요 타임라인** (only if transcript present)
+- [HH:MM:SS] timestamp content
+
+**한 줄 인사이트**
+💡 One-sentence takeaway
+```
+
+Channels are grouped under red `### 📺 ChannelName` headers in Notion.
+
+## Customization
+
+- **Add channels**: edit `config/channels.txt` (one `@handle` per line)
+- **Filter by keywords**: uncomment lines in `config/keywords.txt`
+- **Change format**: edit `config/format.md` — Claude Code follows this exactly
+- **Change tone/audience**: edit `agents/summarizer.md`
+- **Change schedule**: edit `cron:` lines in `.github/workflows/*.yml` ([crontab.guru](https://crontab.guru))
+
+## Notes on Privacy & Cost
+
+- Workflow runs on **public** GitHub repos are free (unlimited minutes)
+- The `output/` folder is committed to the repo — anyone with repo access can see your digest content
+- No video content is stored, only your written summaries
+- Cookies and Notion tokens stay encrypted in GitHub Secrets, never in code
+
+## License
+
+MIT
