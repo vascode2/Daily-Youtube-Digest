@@ -19,11 +19,15 @@ const argv = process.argv.slice(2);
 const daysIdx = argv.indexOf('--days');
 const days = daysIdx >= 0 ? Math.max(1, parseInt(argv[daysIdx + 1], 10) || 1) : 1;
 
-// Date range: yesterday back to (yesterday - days + 1)
-const endDate = new Date();
-endDate.setDate(endDate.getDate() - 1);
+// Date range computed in KST (UTC+9) so cron runs at any UTC time still mean
+// "yesterday in Korea". Without this, a 23:30 UTC cron (08:30 KST next day)
+// would compute yesterday differently from a user running it locally in KST.
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+const nowKst = new Date(Date.now() + KST_OFFSET_MS);
+const endDate = new Date(nowKst);
+endDate.setUTCDate(endDate.getUTCDate() - 1);
 const startDate = new Date(endDate);
-startDate.setDate(startDate.getDate() - (days - 1));
+startDate.setUTCDate(startDate.getUTCDate() - (days - 1));
 
 const endStr = endDate.toISOString().split('T')[0];
 const startStr = startDate.toISOString().split('T')[0];
@@ -92,11 +96,13 @@ for (const channel of channels) {
 
   const videoIds = listResult.stdout.trim().split('\n').filter(Boolean);
   if (videoIds.length === 0) {
-    console.log(`  ⏭️  No videos found`);
+    console.log(`  ⏭️  No videos found from playlist`);
     continue;
   }
+  console.log(`  → Got ${videoIds.length} video IDs from playlist`);
 
   let matched = 0;
+  let firstDate = null;
 
   for (const videoId of videoIds) {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
@@ -112,9 +118,16 @@ for (const channel of channels) {
     if (metaResult.status !== 0) continue;
 
     let video;
-    try { video = JSON.parse(metaResult.stdout); } catch { continue; }
+    try { video = JSON.parse(metaResult.stdout); } catch (e) {
+      console.log(`     ! Parse error for ${videoId}: ${e.message.slice(0,80)}`);
+      continue;
+    }
 
     const uploadDate = video.upload_date; // YYYYMMDD
+    if (!firstDate && uploadDate) {
+      firstDate = uploadDate;
+      console.log(`     newest video upload_date: ${uploadDate} (target: ${startStrYtdlp}..${endStrYtdlp})`);
+    }
 
     // Stop scanning once we go before the start date (videos are newest-first)
     if (uploadDate && uploadDate < startStrYtdlp) break;
