@@ -34,15 +34,11 @@ Topics of interest:
 
 ## [Video Title 1](https://www.youtube.com/watch?v=VIDEO_ID)
 
-📅 YYYY-MM-DD
-
 [핵심 요약 / 주요 타임라인 / 한 줄 인사이트 — see config/format.md]
 
 ---
 
 ## [Video Title 2](https://www.youtube.com/watch?v=VIDEO_ID)
-
-📅 YYYY-MM-DD
 
 [...]
 
@@ -51,8 +47,6 @@ Topics of interest:
 ### 📺 @channel-handle-2
 
 ## [Video Title 3](https://www.youtube.com/watch?v=VIDEO_ID)
-
-📅 YYYY-MM-DD
 
 [...]
 
