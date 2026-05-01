@@ -1,0 +1,67 @@
+name: Daily YouTube Digest
+
+on:
+  schedule:
+    # 23:30 UTC = 08:30 KST (다음날). 매일 실행.
+    - cron: '30 23 * * *'
+  workflow_dispatch: {}  # GitHub UI에서 수동 실행 버튼
+
+permissions:
+  contents: write  # output/ 커밋 권한
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install yt-dlp
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-pip
+          pip install --quiet yt-dlp
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Verify tools
+        run: |
+          node --version
+          yt-dlp --version
+          claude --version
+
+      - name: Collect yesterday's videos
+        run: npm run collect
+
+      - name: Summarize via Claude Code
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          claude --print --dangerously-skip-permissions \
+            "You are running in a CI environment for the Daily YouTube Digest project. Read the latest tmp/raw-*.json file (single-day or range). Read config/format.md and agents/summarizer.md for the exact format and tone rules. For each video, write a summary following config/format.md. Group by channel using the channelName field (NOT the @handle) under '### 📺 ChannelName' h3 headers. Each video title MUST be h2 with a clickable YouTube link: '## [Title](https://www.youtube.com/watch?v=VIDEO_ID)'. Do NOT include upload dates, view counts, duration, or transcript indicators. Sections per video: 핵심 요약, 주요 타임라인 (only if transcript present), 한 줄 인사이트. Save the result to tmp/summaries-{key}.md where {key} matches the raw filename (e.g., raw-2026-04-30.json -> summaries-2026-04-30.md). Start the file with: # YouTube Digest — {key}. End with no trailing extra content."
+
+      - name: Review summaries
+        run: npm run review || echo "Review had warnings but not blocking"
+
+      - name: Publish to Notion + repo
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_PAGE_ID: ${{ secrets.NOTION_PAGE_ID }}
+        run: npm run publish
+
+      - name: Commit output back to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add output/
+          if git diff --cached --quiet; then
+            echo "No new digest output to commit."
+          else
+            git commit -m "Auto: daily digest $(date -u +%Y-%m-%d)"
+            git push
+          fi

@@ -1,0 +1,61 @@
+name: Weekly YouTube Digest
+
+on:
+  schedule:
+    # 매주 월요일 00:00 UTC = 09:00 KST. 지난 7일 다이제스트.
+    - cron: '0 0 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45  # 영상 30+개 처리 가능 시간
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install yt-dlp
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-pip
+          pip install --quiet yt-dlp
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Collect last 7 days
+        run: npm run collect:week
+
+      - name: Summarize via Claude Code
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          claude --print --dangerously-skip-permissions \
+            "You are running in a CI environment for the Weekly YouTube Digest project. Read the latest tmp/raw-*_to_*.json file (7-day range). Read config/format.md and agents/summarizer.md for format and tone rules. For each video, write a summary. Group by channel using the channelName field under '### 📺 ChannelName' h3 headers (NOT the @handle). Each video title MUST be h2 with a clickable YouTube link: '## [Title](https://www.youtube.com/watch?v=VIDEO_ID)'. Do NOT include upload dates, view counts, duration, or transcript indicators. Sections per video: 핵심 요약, 주요 타임라인 (only if transcript present), 한 줄 인사이트. Save to tmp/summaries-{key}.md matching the raw filename. Start with: # YouTube Digest — {key}."
+
+      - name: Review summaries
+        run: npm run review || echo "Review had warnings but not blocking"
+
+      - name: Publish to Notion + repo
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_PAGE_ID: ${{ secrets.NOTION_PAGE_ID }}
+        run: npm run publish
+
+      - name: Commit output back to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add output/
+          if git diff --cached --quiet; then
+            echo "No new digest output to commit."
+          else
+            git commit -m "Auto: weekly digest $(date -u +%Y-%m-%d)"
+            git push
+          fi
