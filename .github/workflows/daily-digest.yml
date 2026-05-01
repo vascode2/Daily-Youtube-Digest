@@ -63,7 +63,13 @@ jobs:
           git add output/
           if git diff --cached --quiet; then
             echo "No new digest output to commit."
-          else
-            git commit -m "Auto: daily digest $(date -u +%Y-%m-%d)"
-            git push
+            exit 0
           fi
+          git commit -m "Auto: daily digest $(date -u +%Y-%m-%d)"
+          # Retry up to 3 times in case remote moved while we were running
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin main && exit 0
+            echo "Push attempt $i failed, retrying..."
+            sleep 3
+          done
+          echo "Push failed after 3 retries"; exit 1
