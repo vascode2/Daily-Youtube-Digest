@@ -1,17 +1,17 @@
 # Keyword filter (optional)
-# If any keywords are listed, only videos matching at least one keyword will be included.
-# Leave empty to include all videos from all channels.
-# Case-insensitive partial match.
+# If any keywords are listed below (uncommented), only videos matching at least one keyword will be included.
+# Leave all lines commented to include all videos.
+# Case-insensitive partial match (matches title or description).
 
-Wi-Fi 7
-LoRaWAN
-Bluetooth LE
-Matter
-Thread
-LTE-M
-NB-IoT
-DECT NR+
-module
-embedded
-IoT
-wireless
+# Examples for FAE / wireless:
+# Wi-Fi 7
+# LoRaWAN
+# Bluetooth
+# Matter
+# Thread
+
+# Examples for AI / dev:
+# Claude
+# Anthropic
+# AI 자동화
+# 프롬프트

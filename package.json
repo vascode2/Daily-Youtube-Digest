@@ -4,9 +4,9 @@
   "type": "module",
   "description": "Daily YouTube video digest generator using Claude Code (no API key required)",
   "scripts": {
-    "collect": "node scripts/collect.js",
-    "review": "node scripts/review.js",
-    "publish": "node scripts/publish.js",
+    "collect": "node --env-file-if-exists=.env scripts/collect.js",
+    "review": "node --env-file-if-exists=.env scripts/review.js",
+    "publish": "node --env-file-if-exists=.env scripts/publish.js",
     "test": "node tests/test-pipeline.js"
   }
 }

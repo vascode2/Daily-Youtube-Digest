@@ -33,7 +33,8 @@ console.log('🔍 Reviewing summaries...\n');
 
 // Check 1: Required sections present
 const requiredSections = ['핵심 요약', '주요 타임라인', '한 줄 인사이트'];
-const videoBlocks = content.split('---').filter(b => b.trim().startsWith('###') || b.trim().includes('###'));
+// Split on standalone --- separators (not table separators like |---|)
+const videoBlocks = content.split(/\n---\s*\n/).filter(b => /^###\s/m.test(b));
 
 for (const block of videoBlocks) {
   const titleMatch = block.match(/###\s+(.+)/);
