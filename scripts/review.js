@@ -75,8 +75,8 @@ for (const block of videoBlocks) {
   }
 }
 
-if (!/###\s+📺\s+@/.test(content)) {
-  issues.push({ level: 'ERROR', check: 'structure', detail: 'No channel sections found (### 📺 @handle)' });
+if (!/###\s+📺\s+/.test(content)) {
+  issues.push({ level: 'ERROR', check: 'structure', detail: 'No channel sections found (### 📺 ChannelName)' });
   errorCount++;
 }
 

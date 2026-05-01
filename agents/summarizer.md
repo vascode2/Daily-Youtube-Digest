@@ -30,7 +30,7 @@ Topics of interest:
 ```markdown
 # YouTube Digest — YYYY-MM-DD
 
-### 📺 @channel-handle-1
+### 📺 Channel Display Name 1
 
 ## [Video Title 1](https://www.youtube.com/watch?v=VIDEO_ID)
 
@@ -44,13 +44,18 @@ Topics of interest:
 
 ---
 
-### 📺 @channel-handle-2
+### 📺 Channel Display Name 2
 
 ## [Video Title 3](https://www.youtube.com/watch?v=VIDEO_ID)
 
 [...]
 
 ---
+
+**Channel header rules:**
+- Use the `channelName` field from raw JSON (NOT the `channel` handle)
+- Examples: "AI Engineer" not "@aiDotEngineer", "안될공학 - IT 테크 신기술" not "@unrealtech"
+- publish.js auto-renders these h3 headers in red color in Notion
 ```
 
 **Heading levels matter:**

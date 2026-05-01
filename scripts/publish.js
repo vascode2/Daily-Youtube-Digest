@@ -33,7 +33,7 @@ const report = fs.existsSync(reportFile) ? JSON.parse(fs.readFileSync(reportFile
 const summaries = fs.readFileSync(summariesFile, 'utf8');
 
 // New format: channels are h3 with `### 📺 @handle`, videos are h2 with `## [Title](url)`
-const channelCount = (summaries.match(/^###\s+📺\s+@/gm) || []).length;
+const channelCount = (summaries.match(/^###\s+📺\s+/gm) || []).length;
 const videoCount = (summaries.match(/^##\s+\[/gm) || []).length;
 
 const titleHeading = isRange
@@ -211,7 +211,11 @@ function markdownToNotionBlocks(md) {
 
 function headingBlock(level, text) {
   const type = `heading_${level}`;
-  return { object: 'block', type, [type]: { rich_text: parseRichText(text) } };
+  // Channel headers (### 📺 Channel Name) are styled red for visibility
+  const isChannelHeader = level === 3 && /^📺\s/.test(text);
+  const block = { rich_text: parseRichText(text) };
+  if (isChannelHeader) block.color = 'red';
+  return { object: 'block', type, [type]: block };
 }
 
 /**

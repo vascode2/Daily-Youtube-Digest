@@ -149,6 +149,7 @@ for (const channel of channels) {
 
     results.push({
       channel: handle,
+      channelName: video.channel || video.uploader || handle,
       videoId,
       title: video.title || 'Untitled',
       views: video.view_count || 0,
