@@ -19,12 +19,12 @@ const argv = process.argv.slice(2);
 const daysIdx = argv.indexOf('--days');
 const days = daysIdx >= 0 ? Math.max(1, parseInt(argv[daysIdx + 1], 10) || 1) : 1;
 
-// Date range computed in KST (UTC+9) so cron runs at any UTC time still mean
-// "yesterday in Korea". Without this, a 23:30 UTC cron (08:30 KST next day)
-// would compute yesterday differently from a user running it locally in KST.
-const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
-const nowKst = new Date(Date.now() + KST_OFFSET_MS);
-const endDate = new Date(nowKst);
+// Date range. Default = UTC, but DIGEST_TIMEZONE env var can shift the
+// reference timezone (e.g. "Asia/Seoul", "America/New_York", or numeric "+09:00", "-05:00").
+// "Yesterday" is computed in this timezone.
+const tzOffsetMs = parseTimezoneOffset(process.env.DIGEST_TIMEZONE);
+const nowAdjusted = new Date(Date.now() + tzOffsetMs);
+const endDate = new Date(nowAdjusted);
 endDate.setUTCDate(endDate.getUTCDate() - 1);
 const startDate = new Date(endDate);
 startDate.setUTCDate(startDate.getUTCDate() - (days - 1));
@@ -32,6 +32,28 @@ startDate.setUTCDate(startDate.getUTCDate() - (days - 1));
 const endStr = endDate.toISOString().split('T')[0];
 const startStr = startDate.toISOString().split('T')[0];
 const key = days > 1 ? `${startStr}_to_${endStr}` : endStr;
+
+function parseTimezoneOffset(tz) {
+  if (!tz) return 0; // UTC default
+  // Numeric: "+09:00", "-05:00", "+9", "-5"
+  const numMatch = String(tz).match(/^([+-])(\d{1,2})(?::?(\d{2}))?$/);
+  if (numMatch) {
+    const sign = numMatch[1] === '-' ? -1 : 1;
+    const h = parseInt(numMatch[2], 10);
+    const m = parseInt(numMatch[3] || '0', 10);
+    return sign * (h * 60 + m) * 60 * 1000;
+  }
+  // Named timezone via Intl
+  try {
+    const d = new Date();
+    const local = new Date(d.toLocaleString('en-US', { timeZone: tz }));
+    const utc = new Date(d.toLocaleString('en-US', { timeZone: 'UTC' }));
+    return local.getTime() - utc.getTime();
+  } catch {
+    console.warn(`Unknown DIGEST_TIMEZONE "${tz}", falling back to UTC`);
+    return 0;
+  }
+}
 
 const channelsFile = path.join(ROOT, 'config', 'channels.txt');
 const keywordsFile = path.join(ROOT, 'config', 'keywords.txt');
@@ -59,6 +81,7 @@ const keywords = fs.existsSync(keywordsFile)
   : [];
 
 console.log(`📅 Range: ${startStr} → ${endStr} (${days} day${days > 1 ? 's' : ''})`);
+console.log(`🌐 Timezone: ${process.env.DIGEST_TIMEZONE || 'UTC (default)'}`);
 console.log(`📺 Channels: ${channels.length}`);
 console.log(`🔑 Keywords: ${keywords.length > 0 ? keywords.join(', ') : 'none (all videos)'}\n`);
 

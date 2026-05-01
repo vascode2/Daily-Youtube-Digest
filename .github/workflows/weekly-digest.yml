@@ -2,8 +2,8 @@ name: Weekly YouTube Digest
 
 on:
   schedule:
-    # 매주 월요일 00:00 UTC = 09:00 KST. 지난 7일 다이제스트.
-    - cron: '0 0 * * 1'
+    # Mondays 13:00 UTC = 09:00 EDT. Last 7 days digest.
+    - cron: '0 13 * * 1'
   workflow_dispatch: {}
 
 permissions:
@@ -32,6 +32,7 @@ jobs:
       - name: Collect last 7 days
         env:
           YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+          DIGEST_TIMEZONE: America/New_York   # User in EST/EDT
         run: npm run collect:week
 
       - name: Summarize via Claude Code

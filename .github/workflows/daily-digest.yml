@@ -2,9 +2,9 @@ name: Daily YouTube Digest
 
 on:
   schedule:
-    # 23:30 UTC = 08:30 KST (다음날). 매일 실행.
-    - cron: '30 23 * * *'
-  workflow_dispatch: {}  # GitHub UI에서 수동 실행 버튼
+    # 12:30 UTC = 08:30 EDT (07:30 EST in winter). Runs daily.
+    - cron: '30 12 * * *'
+  workflow_dispatch: {}  # Manual trigger from GitHub UI
 
 permissions:
   contents: write  # output/ 커밋 권한
@@ -38,6 +38,7 @@ jobs:
       - name: Collect yesterday's videos
         env:
           YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+          DIGEST_TIMEZONE: America/New_York   # User in EST/EDT
         run: npm run collect
 
       - name: Summarize via Claude Code
