@@ -103,60 +103,50 @@ for (const channel of channels) {
 
   console.log(`Fetching ${handle}...`);
 
+  // Single call: fetch full metadata for the last N videos at once.
+  // More robust than per-video metadata calls (which YouTube often rate-limits on cloud IPs).
   const listResult = spawnSync('yt-dlp', [
     ...cookieArgs,
-    '--flat-playlist',
-    '--print', '%(id)s',
+    '--dump-json',
+    '--skip-download',
     '--playlist-end', String(PLAYLIST_END),
+    '--ignore-errors',
     '--no-warnings',
     url
-  ], { encoding: 'utf8', timeout: 60000 });
+  ], { encoding: 'utf8', timeout: 180000, maxBuffer: 200 * 1024 * 1024 });
 
-  if (listResult.status !== 0) {
-    console.error(`  ❌ Failed to fetch: ${(listResult.stderr || '').split('\n')[0]}`);
+  if (listResult.status !== 0 && !listResult.stdout) {
+    const stderr = (listResult.stderr || '').split('\n').filter(Boolean).slice(0, 3).join(' | ');
+    console.error(`  ❌ yt-dlp failed: ${stderr.slice(0, 400)}`);
     continue;
   }
+  if (listResult.stderr && listResult.stderr.length > 0) {
+    const errLines = listResult.stderr.split('\n').filter(l => l.trim() && !l.includes('WARNING')).slice(0, 2).join(' | ');
+    if (errLines) console.log(`  ⚠️  yt-dlp stderr: ${errLines.slice(0, 300)}`);
+  }
 
-  const videoIds = listResult.stdout.trim().split('\n').filter(Boolean);
-  if (videoIds.length === 0) {
-    console.log(`  ⏭️  No videos found from playlist`);
+  // Each line is one video's JSON
+  const videos = listResult.stdout.split('\n').filter(Boolean).map(l => {
+    try { return JSON.parse(l); } catch { return null; }
+  }).filter(Boolean);
+
+  if (videos.length === 0) {
+    console.log(`  ⏭️  No videos in metadata response`);
     continue;
   }
-  console.log(`  → Got ${videoIds.length} video IDs from playlist`);
+  console.log(`  → Got ${videos.length} videos with full metadata`);
+  if (videos[0]) console.log(`     newest upload_date: ${videos[0].upload_date} (target: ${startStrYtdlp}..${endStrYtdlp})`);
 
   let matched = 0;
-  let firstDate = null;
 
-  for (const videoId of videoIds) {
+  for (const video of videos) {
+    const videoId = video.id;
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-    const metaResult = spawnSync('yt-dlp', [
-      ...cookieArgs,
-      '--dump-json',
-      '--skip-download',
-      '--no-warnings',
-      videoUrl
-    ], { encoding: 'utf8', timeout: 60000, maxBuffer: 50 * 1024 * 1024 });
-
-    if (metaResult.status !== 0) continue;
-
-    let video;
-    try { video = JSON.parse(metaResult.stdout); } catch (e) {
-      console.log(`     ! Parse error for ${videoId}: ${e.message.slice(0,80)}`);
-      continue;
-    }
-
-    const uploadDate = video.upload_date; // YYYYMMDD
-    if (!firstDate && uploadDate) {
-      firstDate = uploadDate;
-      console.log(`     newest video upload_date: ${uploadDate} (target: ${startStrYtdlp}..${endStrYtdlp})`);
-    }
-
-    // Stop scanning once we go before the start date (videos are newest-first)
-    if (uploadDate && uploadDate < startStrYtdlp) break;
-    // Skip if outside range (newer than end date — shouldn't happen but safety)
-    if (uploadDate && uploadDate > endStrYtdlp) continue;
+    const uploadDate = video.upload_date;
     if (!uploadDate) continue;
+    if (uploadDate < startStrYtdlp) break;
+    if (uploadDate > endStrYtdlp) continue;
 
     matched++;
 
