@@ -40,7 +40,22 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           claude --print --dangerously-skip-permissions \
-            "You are running in a CI environment for the Weekly YouTube Digest project. Read the latest tmp/raw-*_to_*.json file (7-day range). Read config/format.md and agents/summarizer.md for format and tone rules. For each video, write a summary. Group by channel using the channelName field under '### 📺 ChannelName' h3 headers (NOT the @handle). Each video title MUST be h2 with a clickable YouTube link: '## [Title](https://www.youtube.com/watch?v=VIDEO_ID)'. Do NOT include upload dates, view counts, duration, or transcript indicators. Sections per video: 핵심 요약, 주요 타임라인 (only if transcript present), 한 줄 인사이트. Save to tmp/summaries-{key}.md matching the raw filename. Start with: # YouTube Digest — {key}."
+            "CI MODE — ONLY DO STEP 2 OF THE PIPELINE. Do NOT run any npm commands. Do NOT write to output/. Do NOT trigger review or publish. Ignore CLAUDE.md's full-pipeline instructions; the workflow handles those.
+
+            Your single job:
+            1. Find the latest tmp/raw-*_to_*.json file (7-day range).
+            2. Read it. Read config/format.md and agents/summarizer.md.
+            3. Write a summary file to tmp/summaries-<KEY>.md where <KEY> matches the raw filename.
+
+            Format requirements (strict):
+            - First line: '# YouTube Digest — <KEY>'
+            - Group by channel using the channelName field (NOT the @handle) under '### 📺 ChannelName' h3 headers.
+            - Each video title MUST be h2 with clickable YouTube link: '## [Title](https://www.youtube.com/watch?v=VIDEO_ID)'.
+            - DO NOT include upload dates, view counts, duration, or transcript indicators.
+            - Sections per video: 핵심 요약 (>quote), 주요 타임라인 (only if hasTranscript=true), 한 줄 인사이트 (💡 emoji).
+            - Separator '---' between videos.
+
+            STOP immediately after writing tmp/summaries-<KEY>.md. Do not run any other commands."
 
       - name: Review summaries
         run: npm run review || echo "Review had warnings but not blocking"
