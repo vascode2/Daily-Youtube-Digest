@@ -18,6 +18,8 @@ const ROOT = path.join(__dirname, '..');
 const argv = process.argv.slice(2);
 const daysIdx = argv.indexOf('--days');
 const days = daysIdx >= 0 ? Math.max(1, parseInt(argv[daysIdx + 1], 10) || 1) : 1;
+const maxPerChannelIdx = argv.indexOf('--max-per-channel');
+const maxPerChannel = maxPerChannelIdx >= 0 ? Math.max(1, parseInt(argv[maxPerChannelIdx + 1], 10) || 0) : 0; // 0 = unlimited
 
 // Date range. Default = UTC, but DIGEST_TIMEZONE env var can shift the
 // reference timezone (e.g. "Asia/Seoul", "America/New_York", or numeric "+09:00", "-05:00").
@@ -144,8 +146,15 @@ for (const channel of channels) {
   if (videos[0]) console.log(`     newest upload_date: ${videos[0].upload_date} (target: ${startStrYtdlp}..${endStrYtdlp})`);
 
   let matched = 0;
+  let savedThisChannel = 0;
 
   for (const video of videos) {
+    // Per-channel cap (counts videos actually saved, not just date-matched)
+    if (maxPerChannel > 0 && savedThisChannel >= maxPerChannel) {
+      console.log(`  🛑 Reached cap of ${maxPerChannel} videos for this channel`);
+      break;
+    }
+
     const videoId = video.id;
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
@@ -206,6 +215,7 @@ for (const channel of channels) {
       description: video.description || '',
       hasTranscript
     });
+    savedThisChannel++;
 
     console.log(`  📝 [${uploadDateStr}] ${video.title} ${hasTranscript ? '' : '(desc only)'}`);
   }
