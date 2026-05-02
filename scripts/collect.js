@@ -105,10 +105,16 @@ for (const channel of channels) {
 
   // Single call: fetch full metadata for the last N videos at once.
   // More robust than per-video metadata calls (which YouTube often rate-limits on cloud IPs).
+  // --ignore-no-formats-error: don't fail when YouTube returns metadata without playable formats
+  //   (we don't need formats — we just want title/upload_date/etc)
+  // --extractor-args player_client=...: try multiple YouTube clients in order
+  //   (some IPs/cookies are blocked on certain clients but work on others)
   const listResult = spawnSync('yt-dlp', [
     ...cookieArgs,
     '--dump-json',
     '--skip-download',
+    '--ignore-no-formats-error',
+    '--extractor-args', 'youtube:player_client=default,web,android,ios',
     '--playlist-end', String(PLAYLIST_END),
     '--ignore-errors',
     '--no-warnings',
@@ -171,6 +177,8 @@ for (const channel of channels) {
       '--sub-lang', 'en,ko',
       '--sub-format', 'vtt',
       '--skip-download',
+      '--ignore-no-formats-error',
+      '--extractor-args', 'youtube:player_client=default,web,android,ios',
       '--no-warnings',
       '-o', path.join(tmpDir, `%(id)s.%(ext)s`),
       videoUrl
