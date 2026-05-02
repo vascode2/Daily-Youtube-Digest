@@ -70,6 +70,7 @@ jobs:
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_PAGE_ID: ${{ secrets.NOTION_PAGE_ID }}
+          DIGEST_TIMEZONE: America/New_York
         run: npm run publish
 
       - name: Commit output back to repo

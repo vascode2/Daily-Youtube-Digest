@@ -27,8 +27,15 @@ const [startStr, endStr] = isRange ? key.split('_to_') : [key, key];
 
 fs.mkdirSync(outputDir, { recursive: true });
 
+// Display timestamp in DIGEST_TIMEZONE (set in workflow), or local TZ if unset
 const now = new Date();
-const timeStr = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+const displayTz = process.env.DIGEST_TIMEZONE || undefined;
+const timeStr = now.toLocaleTimeString('ko-KR', {
+  hour: '2-digit',
+  minute: '2-digit',
+  timeZone: displayTz,
+  timeZoneName: 'short'
+});
 const report = fs.existsSync(reportFile) ? JSON.parse(fs.readFileSync(reportFile, 'utf8')) : {};
 const summaries = fs.readFileSync(summariesFile, 'utf8');
 
@@ -224,8 +231,10 @@ function headingBlock(level, text) {
  */
 function parseRichText(text) {
   // Tokenize: find all [text](url) and **bold** spans, fill the rest as plain.
+  // Link regex: non-greedy text, but must be followed by '](http...' so nested
+  // brackets in YouTube titles like '[프롬프트 공유] 시댄스...' are handled.
   const tokens = [];
-  const linkRe = /\[([^\]]+)\]\(([^)]+)\)/g;
+  const linkRe = /\[([\s\S]+?)\]\((https?:\/\/[^)]+)\)/g;
   const boldRe = /\*\*([^*]+)\*\*/g;
   const matches = [];
   let m;
