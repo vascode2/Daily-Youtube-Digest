@@ -2,8 +2,8 @@ name: Weekly YouTube Digest
 
 on:
   schedule:
-    # Mondays 13:00 UTC = 09:00 EDT. Last 7 days digest.
-    - cron: '0 13 * * 1'
+    # Saturdays 11:00 UTC = 07:00 EDT (summer) / 06:00 EST (winter). Last 7 days.
+    - cron: '0 11 * * 6'
   workflow_dispatch: {}
 
 permissions:
