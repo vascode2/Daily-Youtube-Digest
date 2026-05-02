@@ -1,9 +1,20 @@
-name: Weekly YouTube Digest
+name: Channel YouTube Digest
+
+# On-demand: summarize the most recent N videos from a single YouTube channel.
+# Trigger from the Actions tab → "Run workflow" → enter channel handle.
 
 on:
-  # Auto-cron disabled — daily digest covers everything cumulatively.
-  # Manual run still available via workflow_dispatch.
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'YouTube channel handle (e.g. @unrealtech)'
+        required: true
+        type: string
+      limit:
+        description: 'How many recent videos to summarize'
+        required: false
+        type: string
+        default: '10'
 
 permissions:
   contents: write
@@ -11,7 +22,7 @@ permissions:
 jobs:
   digest:
     runs-on: ubuntu-latest
-    timeout-minutes: 45  # 영상 30+개 처리 가능 시간
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -28,11 +39,14 @@ jobs:
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
 
-      - name: Collect last 7 days
+      - name: Collect videos from single channel
         env:
           YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
-          DIGEST_TIMEZONE: America/New_York   # User in EST/EDT
-        run: npm run collect:week
+          DIGEST_TIMEZONE: America/New_York
+        run: |
+          node --env-file-if-exists=.env scripts/collect.js \
+            --channel "${{ inputs.channel }}" \
+            --limit "${{ inputs.limit }}"
 
       - name: Summarize via Claude Code
         env:
@@ -42,19 +56,19 @@ jobs:
             "CI MODE — ONLY DO STEP 2 OF THE PIPELINE. Do NOT run any npm commands. Do NOT write to output/. Do NOT trigger review or publish. Ignore CLAUDE.md's full-pipeline instructions; the workflow handles those.
 
             Your single job:
-            1. Find the latest tmp/raw-*_to_*.json file (7-day range).
+            1. Find the latest tmp/raw-channel-*.json file (single-channel mode).
             2. Read it. Read config/format.md and agents/summarizer.md.
-            3. Write a summary file to tmp/summaries-<KEY>.md where <KEY> matches the raw filename.
+            3. Write a summary file to tmp/summaries-<KEY>.md where <KEY> matches the raw filename (e.g., raw-channel-unrealtech-2026-05-02.json → summaries-channel-unrealtech-2026-05-02.md).
 
             Format requirements (strict):
-            - First line: '# YouTube Digest — <KEY>'
-            - Group by channel using the channelName field (NOT the @handle) under '### 📺 ChannelName' h3 headers.
+            - First line: '# Channel Digest — <KEY>'
+            - Group by channel using the channelName field under '### 📺 ChannelName' h3 headers.
             - Each video title MUST be h2 with clickable YouTube link: '## [Title](https://www.youtube.com/watch?v=VIDEO_ID)'.
             - DO NOT include upload dates, view counts, duration, or transcript indicators.
             - Sections per video: 핵심 요약 (>quote), 주요 타임라인 (only if hasTranscript=true), 한 줄 인사이트 (💡 emoji).
             - Separator '---' between videos.
 
-            STOP immediately after writing tmp/summaries-<KEY>.md. Do not run any other commands."
+            STOP immediately after writing tmp/summaries-<KEY>.md."
 
       - name: Review summaries
         run: npm run review || echo "Review had warnings but not blocking"
@@ -75,7 +89,7 @@ jobs:
             echo "No new digest output to commit."
             exit 0
           fi
-          git commit -m "Auto: weekly digest $(date -u +%Y-%m-%d)"
+          git commit -m "Auto: channel digest ${{ inputs.channel }} $(date -u +%Y-%m-%d)"
           for i in 1 2 3; do
             git pull --rebase origin main && git push origin main && exit 0
             echo "Push attempt $i failed, retrying..."

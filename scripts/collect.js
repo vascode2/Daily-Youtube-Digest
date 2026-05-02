@@ -20,6 +20,10 @@ const daysIdx = argv.indexOf('--days');
 const days = daysIdx >= 0 ? Math.max(1, parseInt(argv[daysIdx + 1], 10) || 1) : 1;
 const maxPerChannelIdx = argv.indexOf('--max-per-channel');
 const maxPerChannel = maxPerChannelIdx >= 0 ? Math.max(1, parseInt(argv[maxPerChannelIdx + 1], 10) || 0) : 0; // 0 = unlimited
+const channelIdx = argv.indexOf('--channel');
+const singleChannel = channelIdx >= 0 ? argv[channelIdx + 1] : null;
+const limitIdx = argv.indexOf('--limit');
+const limit = limitIdx >= 0 ? Math.max(1, parseInt(argv[limitIdx + 1], 10) || 10) : 10;
 
 // Date range. Default = UTC, but DIGEST_TIMEZONE env var can shift the
 // reference timezone (e.g. "Asia/Seoul", "America/New_York", or numeric "+09:00", "-05:00").
@@ -60,7 +64,16 @@ function parseTimezoneOffset(tz) {
 const channelsFile = path.join(ROOT, 'config', 'channels.txt');
 const keywordsFile = path.join(ROOT, 'config', 'keywords.txt');
 const tmpDir = path.join(ROOT, 'tmp');
-const outputFile = path.join(tmpDir, `raw-${key}.json`);
+
+// Single-channel mode: ignore date range, fetch last N videos from one handle
+let mode = 'multi';
+let channelKey = null;
+if (singleChannel) {
+  mode = 'channel';
+  const sanitized = singleChannel.replace(/^@/, '').replace(/[^A-Za-z0-9가-힣_-]/g, '');
+  channelKey = `channel-${sanitized}-${endStr}`;
+}
+const outputFile = path.join(tmpDir, `raw-${mode === 'channel' ? channelKey : key}.json`);
 
 fs.mkdirSync(tmpDir, { recursive: true });
 
@@ -74,16 +87,25 @@ if (process.env.YOUTUBE_COOKIES_B64) {
 }
 const cookieArgs = cookiesFile ? ['--cookies', cookiesFile] : [];
 
-const channels = fs.readFileSync(channelsFile, 'utf8')
-  .split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+// Channels list: from --channel arg (single) or channels.txt (multi)
+const channels = mode === 'channel'
+  ? [singleChannel]
+  : fs.readFileSync(channelsFile, 'utf8')
+      .split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
 
-const keywords = fs.existsSync(keywordsFile)
-  ? fs.readFileSync(keywordsFile, 'utf8')
-      .split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
-  : [];
+const keywords = mode === 'channel'
+  ? []  // no keyword filter in single-channel mode
+  : (fs.existsSync(keywordsFile)
+    ? fs.readFileSync(keywordsFile, 'utf8')
+        .split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
+    : []);
 
-console.log(`📅 Range: ${startStr} → ${endStr} (${days} day${days > 1 ? 's' : ''})`);
-console.log(`🌐 Timezone: ${process.env.DIGEST_TIMEZONE || 'UTC (default)'}`);
+if (mode === 'channel') {
+  console.log(`🎯 Channel mode: ${singleChannel}, last ${limit} videos (no date filter)`);
+} else {
+  console.log(`📅 Range: ${startStr} → ${endStr} (${days} day${days > 1 ? 's' : ''})`);
+  console.log(`🌐 Timezone: ${process.env.DIGEST_TIMEZONE || 'UTC (default)'}`);
+}
 console.log(`📺 Channels: ${channels.length}`);
 console.log(`🔑 Keywords: ${keywords.length > 0 ? keywords.join(', ') : 'none (all videos)'}\n`);
 
@@ -97,7 +119,7 @@ const startStrYtdlp = startStr.replace(/-/g, '');
 const endStrYtdlp = endStr.replace(/-/g, '');
 
 const results = [];
-const PLAYLIST_END = Math.max(10, days * 5); // scan more videos when range is wider
+const PLAYLIST_END = mode === 'channel' ? limit : Math.max(10, days * 5);
 
 for (const channel of channels) {
   const handle = channel.startsWith('@') ? channel : `@${channel}`;
@@ -150,8 +172,9 @@ for (const channel of channels) {
 
   for (const video of videos) {
     // Per-channel cap (counts videos actually saved, not just date-matched)
-    if (maxPerChannel > 0 && savedThisChannel >= maxPerChannel) {
-      console.log(`  🛑 Reached cap of ${maxPerChannel} videos for this channel`);
+    const cap = mode === 'channel' ? limit : maxPerChannel;
+    if (cap > 0 && savedThisChannel >= cap) {
+      console.log(`  🛑 Reached cap of ${cap} videos for this channel`);
       break;
     }
 
@@ -160,8 +183,11 @@ for (const channel of channels) {
 
     const uploadDate = video.upload_date;
     if (!uploadDate) continue;
-    if (uploadDate < startStrYtdlp) break;
-    if (uploadDate > endStrYtdlp) continue;
+    // In channel mode, skip date filtering (take all N most recent)
+    if (mode !== 'channel') {
+      if (uploadDate < startStrYtdlp) break;
+      if (uploadDate > endStrYtdlp) continue;
+    }
 
     matched++;
 

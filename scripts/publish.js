@@ -23,7 +23,16 @@ const reportFile = path.join(tmpDir, `review-report-${key}.json`);
 const outputFile = path.join(outputDir, `${key}.md`);
 
 const isRange = key.includes('_to_');
-const [startStr, endStr] = isRange ? key.split('_to_') : [key, key];
+const isChannel = key.startsWith('channel-');
+let startStr, endStr, channelHandle;
+if (isChannel) {
+  // key format: channel-{handle}-YYYY-MM-DD
+  const m = key.match(/^channel-(.+)-(\d{4}-\d{2}-\d{2})$/);
+  if (m) { channelHandle = m[1]; endStr = startStr = m[2]; }
+  else { endStr = startStr = key; }
+} else {
+  [startStr, endStr] = isRange ? key.split('_to_') : [key, key];
+}
 
 fs.mkdirSync(outputDir, { recursive: true });
 
@@ -43,9 +52,11 @@ const summaries = fs.readFileSync(summariesFile, 'utf8');
 const channelCount = (summaries.match(/^###\s+📺\s+/gm) || []).length;
 const videoCount = (summaries.match(/^##\s+\[/gm) || []).length;
 
-const titleHeading = isRange
-  ? `# 📺 YouTube Weekly Digest — ${formatDateKo(startStr)} ~ ${formatDateKo(endStr)}`
-  : `# 📺 YouTube Digest — ${formatDateKo(endStr)}`;
+const titleHeading = isChannel
+  ? `# 📺 Channel Digest — @${channelHandle} (${formatDateKo(endStr)})`
+  : isRange
+    ? `# 📺 YouTube Weekly Digest — ${formatDateKo(startStr)} ~ ${formatDateKo(endStr)}`
+    : `# 📺 YouTube Digest — ${formatDateKo(endStr)}`;
 
 const header = `${titleHeading}
 
@@ -74,9 +85,11 @@ if (notionToken && notionPageId) {
     const blocks = markdownToNotionBlocks(finalContent);
     console.log(`   Converted to ${blocks.length} Notion blocks`);
 
-    const notionTitle = isRange
-      ? `📺 Weekly Digest ${startStr} ~ ${endStr}`
-      : `📺 YouTube Digest ${endStr}`;
+    const notionTitle = isChannel
+      ? `📺 Channel Digest: @${channelHandle} (${endStr})`
+      : isRange
+        ? `📺 Weekly Digest ${startStr} ~ ${endStr}`
+        : `📺 YouTube Digest ${endStr}`;
 
     const firstBatch = blocks.slice(0, 100);
     const restBatches = [];
