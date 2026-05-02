@@ -1,4 +1,4 @@
-name: Channel YouTube Digest
+name: '[MANUAL] Channel YouTube Digest'
 
 # On-demand: summarize the most recent N videos from a single YouTube channel.
 # Trigger from the Actions tab → "Run workflow" → enter channel handle.
@@ -52,7 +52,7 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          claude --print --dangerously-skip-permissions \
+          claude --print --dangerously-skip-permissions --model claude-haiku-4-5-20251001 \
             "CI MODE — ONLY DO STEP 2 OF THE PIPELINE. Do NOT run any npm commands. Do NOT write to output/. Do NOT trigger review or publish. Ignore CLAUDE.md's full-pipeline instructions; the workflow handles those.
 
             Your single job:
