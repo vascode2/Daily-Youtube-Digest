@@ -2,6 +2,8 @@
 
 > A small robot that watches your YouTube subscriptions overnight and leaves a clean summary in your Notion before you wake up.
 
+![Example output in Notion](docs/example-output.png)
+
 **📖 [See the visual explanation →](https://vascode2.github.io/Daily-Youtube-Digest/)**
 *(One-page walkthrough with a flowchart — how it works, what you get, and why it's free.)*
 
@@ -29,21 +31,26 @@ A new Notion page every morning, looking roughly like this:
 
 ```
 📺 YouTube Digest 2026-05-02
-생성: 07:15 EDT · 채널: 3개 · 영상: 6개
+Generated: 07:15 GMT-4 · Channels: 3 · Videos: 6 · Errors: 0
 
 📺 AI Engineer  ← channel name in red
 
-   Building Conversational Agents with Gemini
-   > Google DeepMind engineers show how to build a real-time
-   > voice assistant with their new Live API. Covers WebSocket
-   > setup, multimodal input, tool calls during conversation.
+   Building Conversational Agents with Gemini Live API
+   Key Summary
+   > Google DeepMind engineers show how to build a real-time voice
+   > assistant with their new Live API. Covers WebSocket setup,
+   > multimodal input, and tool calls during a live conversation.
+   Key Timeline
+   - 00:04:18  Setting up the WebSocket session
+   - 00:18:55  Tool calls during a live conversation
    💡 Real-time multimodal agents are getting cheap and fast.
 
-   Why building eval platforms is hard
+   Why Building Eval Platforms Is Hard
+   Key Summary
    > A Braintrust engineer breaks down why "good" is hard to
    > define for AI outputs. Walks through labeling, versioning,
-   > and team alignment problems most eval teams hit by month 3.
-   💡 If you ship AI features, eval pipeline > model choice.
+   > and team-alignment problems most eval teams hit by month 3.
+   💡 If you ship AI features, eval pipeline matters more than model.
 ```
 
 Every video title is a clickable link to YouTube. Channel headers are red so you can scan fast.
@@ -179,7 +186,7 @@ That's it. Tomorrow at 7 AM it runs by itself.
 
 ## Troubleshooting
 
-**"수집된 영상이 없습니다" (no videos collected)** — yesterday simply had no uploads from your channels, OR your YouTube cookies expired. Refresh the cookies (step 7 above) every ~60 days.
+**"No videos collected"** — yesterday simply had no uploads from your channels, OR your YouTube cookies expired. Refresh the cookies (step 7 above) every ~60 days.
 
 **"You've hit your limit"** — Claude Pro has a 5-hour rolling usage window. If you've been chatting with Claude a lot, the workflow shares that quota. Wait until the limit resets or upgrade your subscription.
 
