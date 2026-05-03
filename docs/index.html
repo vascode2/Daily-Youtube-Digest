@@ -315,30 +315,60 @@
   .channel-header {
     color: var(--negative);
     font-weight: 600;
-    margin: 24px 0 12px;
-    font-size: 1rem;
+    margin: 32px 0 16px;
+    font-size: 1.0625rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
   .video-title {
     font-size: 1.25rem;
     font-weight: 600;
     color: var(--text);
-    margin: 12px 0 8px;
+    margin: 20px 0 12px;
     text-decoration: underline;
     text-decoration-color: var(--accent);
     text-underline-offset: 4px;
+  }
+  .label {
+    font-weight: 600;
+    color: var(--text);
+    margin: 16px 0 6px;
+    font-size: 0.9375rem;
   }
   .video-summary {
     border-left: 3px solid var(--border);
     padding-left: 16px;
     color: var(--text-secondary);
     font-size: 0.9375rem;
-    margin: 8px 0 16px;
+    margin: 4px 0 12px;
     line-height: 1.6;
+  }
+  .timeline-list {
+    margin: 4px 0 12px;
+    padding-left: 22px;
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    line-height: 1.7;
+  }
+  .timeline-list li { margin: 2px 0; }
+  .timeline-list code {
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    background: var(--surface-hover);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.8125rem;
+    color: var(--text);
   }
   .video-insight {
     color: var(--warning);
     font-size: 0.9375rem;
-    margin: 8px 0;
+    margin: 12px 0;
+  }
+  .video-divider {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: 24px 0;
   }
 
   /* Two-column compare */
@@ -784,27 +814,56 @@ flowchart TD
     <!-- What you get -->
     <section data-reveal>
       <h2>What you actually see</h2>
-      <p class="section-subtitle">A new Notion page lands every morning. Here's roughly what it looks like.</p>
+      <p class="section-subtitle">A new Notion page lands every morning. Here's exactly what one entry looks like — channel header, video title (clickable), key summary, timeline, and a one-line takeaway.</p>
 
       <div class="notion-mock">
         <div class="notion-mock-title">📺 YouTube Digest 2026-05-02</div>
-        <div class="notion-mock-meta">생성: 07:15 EDT · 채널: 3개 · 영상: 6개 · 오류: 0건</div>
+        <div class="notion-mock-meta">Generated: 07:15 GMT-4 · Channels: 3 · Videos: 6 · Errors: 0</div>
 
         <div class="channel-header">📺 AI Engineer</div>
 
-        <div class="video-title">Building Conversational Agents with Gemini</div>
-        <div class="video-summary">Google DeepMind engineers demonstrate how to build a real-time voice assistant using their new Live API. Covers WebSocket setup, multimodal input, and how to handle tool calls during a live conversation.</div>
-        <div class="video-insight">💡 Real-time multimodal agents are getting cheap and fast — worth a serious look for any voice/IoT use case.</div>
+        <div class="video-title">Building Conversational Agents with Gemini Live API</div>
+        <div class="label">Key Summary</div>
+        <div class="video-summary">Google DeepMind engineers walk through building a real-time voice assistant with the new Live API. The session covers WebSocket setup, multimodal streaming input (audio + screen share), and how to invoke tools mid-conversation without breaking the audio loop.</div>
+        <div class="label">Key Timeline</div>
+        <ul class="timeline-list">
+          <li><code>00:00:42</code> Why streaming-first APIs change agent design</li>
+          <li><code>00:04:18</code> Setting up the WebSocket session and auth</li>
+          <li><code>00:11:30</code> Handling barge-in and turn detection</li>
+          <li><code>00:18:55</code> Tool calls during a live conversation</li>
+          <li><code>00:25:10</code> Production tips: cost, latency, fallbacks</li>
+        </ul>
+        <div class="video-insight">💡 Real-time multimodal agents are getting cheap and fast — worth a serious look for any voice or IoT product.</div>
 
-        <div class="video-title">Why building eval platforms is hard</div>
-        <div class="video-summary">An engineer at Braintrust breaks down why "good" is so hard to define for AI outputs. Walks through the labeling, versioning, and team-alignment problems most evals teams hit by month 3.</div>
-        <div class="video-insight">💡 If you're shipping AI features, a real eval pipeline matters more than your model choice.</div>
+        <hr class="video-divider" />
 
-        <div class="channel-header">📺 안될공학</div>
+        <div class="video-title">Why Building Eval Platforms Is Hard</div>
+        <div class="label">Key Summary</div>
+        <div class="video-summary">A Braintrust engineer breaks down why "good" is so hard to define for AI outputs. He walks through the labeling, versioning, and team-alignment problems most eval teams hit by month three, and proposes a minimal scoring loop that scales without a full platform.</div>
+        <div class="label">Key Timeline</div>
+        <ul class="timeline-list">
+          <li><code>00:01:20</code> The illusion of "we'll just measure quality"</li>
+          <li><code>00:07:45</code> Labelers disagree more than you think</li>
+          <li><code>00:14:02</code> Versioning prompts vs. versioning datasets</li>
+          <li><code>00:22:30</code> A minimal scoring loop that actually works</li>
+        </ul>
+        <div class="video-insight">💡 If you ship AI features, a real eval pipeline matters more than your model choice.</div>
 
-        <div class="video-title">Google TPU 8세대 분석 — 학습과 추론을 나누다</div>
-        <div class="video-summary">구글이 TPU 8세대를 학습 전용(8t)과 추론 전용(8i)으로 분리했다. 엔비디아 Rubin과 비교하면서 AI 인프라 경쟁이 단순 칩에서 시스템 전체로 옮겨가고 있는 흐름을 정리.</div>
-        <div class="video-insight">💡 학습/추론 하드웨어 분리 트렌드 — 엣지 AI 설계에도 그대로 적용될 패러다임.</div>
+        <hr class="video-divider" />
+
+        <div class="channel-header">📺 Career Hacker Alex</div>
+
+        <div class="video-title">The 200-LoC Skill That Replaced 12,000 Lines of Code</div>
+        <div class="label">Key Summary</div>
+        <div class="video-summary">A walkthrough of how an engineer rewrote a complex Git Worktrees feature as a Claude Code Skill — going from 12,000 lines of TypeScript to ~200 lines of plain markdown. Covers the trade-offs, what broke, and where the markdown approach hits its limits.</div>
+        <div class="label">Key Timeline</div>
+        <ul class="timeline-list">
+          <li><code>00:02:10</code> The original 12K-line implementation</li>
+          <li><code>00:06:40</code> Rewriting it as a markdown skill</li>
+          <li><code>00:13:25</code> Edge cases that the markdown version handles worse</li>
+          <li><code>00:17:50</code> When markdown wins, when it doesn't</li>
+        </ul>
+        <div class="video-insight">💡 Markdown-driven workflows are the new "config as code" — most internal tools are over-engineered.</div>
       </div>
     </section>
 
