@@ -941,7 +941,7 @@
                 <ul>
                   <li>Claude CLI starts in headless mode</li>
                   <li>Reads the raw JSON file from step 2</li>
-                  <li>For each video: writes 핵심요약 + 타임라인 + 인사이트</li>
+                  <li>For each video: writes Key Summary + Timeline + Insight</li>
                   <li>Groups summaries under red channel headers</li>
                   <li>Saves as a markdown file in tmp/</li>
                 </ul>
@@ -981,7 +981,7 @@
                 <h4>What happens</h4>
                 <ul>
                   <li>Read the summaries markdown file</li>
-                  <li>Check every video has 핵심 요약 + 한 줄 인사이트</li>
+                  <li>Check every video has Key Summary + one-line Insight</li>
                   <li>Verify timestamp format (HH:MM:SS)</li>
                   <li>Check at least one channel section exists</li>
                   <li>Auto-fix small format issues; warn on bigger ones</li>
@@ -1097,13 +1097,18 @@
 
 <span class="comment">## [Replacing 12K LoC with a 200 LoC Skill]</span>(<span class="string">https://www.youtube.com/watch?v=WE_Gnowy3uw</span>)
 
-<span class="key">**핵심 요약**</span>
-> Cursor가 무거운 Git WorkTrees 기능을 Skills + Slash 커맨드 +
-> Sub-agent 구조로 재구현 — 15,000줄 코드를 약 200줄
-> 마크다운으로 대체.
+<span class="key">**Key Summary**</span>
+> Cursor rewrote its heavy Git WorkTrees feature using a Skills +
+> slash-command + sub-agent structure — replacing roughly 15,000 lines
+> of TypeScript with about 200 lines of plain markdown.
 
-<span class="key">**한 줄 인사이트**</span>
-💡 마크다운 기반 워크플로우의 정당성 입증.</pre>
+<span class="key">**Key Timeline**</span>
+- <span class="string">00:02:10</span> The original 12K-line implementation
+- <span class="string">00:06:40</span> Rewriting it as a markdown skill
+- <span class="string">00:13:25</span> Edge cases the markdown version handles worse
+
+<span class="key">**Insight**</span>
+💡 Markdown-driven workflows are validated — most internal tools are over-engineered.</pre>
         </div>
 
         <div class="stage">
@@ -1184,7 +1189,7 @@
           </div>
           <h3>Zero videos uploaded</h3>
           <p>Some days no channels post anything. The pipeline still runs successfully but produces an empty digest with a friendly message.</p>
-          <p class="recovery"><strong>Recovery:</strong> Not a failure — just a quiet day. Empty Notion page is created with "수집된 영상이 없습니다" notice.</p>
+          <p class="recovery"><strong>Recovery:</strong> Not a failure — just a quiet day. An empty Notion page is created with a "No videos collected" notice.</p>
         </article>
 
         <article class="failure-card">
