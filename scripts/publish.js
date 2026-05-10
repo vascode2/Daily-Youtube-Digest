@@ -98,7 +98,7 @@ if (notionToken && notionPageId) {
       ? `📺 Channel Digest: @${channelHandle} (${endStr})`
       : isRange
         ? `📺 Weekly Digest ${startStr} ~ ${endStr}`
-        : endStr;
+        : `📺 ${endStr}`;
 
     const firstBatch = blocks.slice(0, 100);
     const restBatches = [];
