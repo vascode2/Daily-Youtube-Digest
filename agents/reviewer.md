@@ -10,15 +10,19 @@ Quality-check generated summaries and auto-fix common issues before publishing.
 - Missing fields → flag as ERROR, attempt to regenerate that section only
 
 ### 2. Length Check
-- 핵심 요약: 2-4 sentences
+- 핵심 요약: 2-3문단, 문단당 2-3문장
 - 주요 타임라인: at least 3 entries
 - 한 줄 인사이트: exactly 1 sentence
 - If too short → flag as WARNING, do not block publish
 
 ### 3. Language Check
 - Korean channels → Korean output
-- English channels → English or Korean (consistent within channel)
-- Mixed language in single summary → flag as WARNING, fix to Korean
+- English channels → Korean output (번역 요약)
+- Mixed language in single summary → flag as ERROR, fix to Korean
+
+### 3-1. Evidence Check
+- 핵심 요약에 발표자가 든 사례/데모/비교 예시가 최소 1개 포함되어야 함
+- 누락 시 ERROR
 
 ### 4. Relevance Check (for FAE use)
 - If keywords.txt is non-empty, verify at least one keyword appears in summary
@@ -26,6 +30,7 @@ Quality-check generated summaries and auto-fix common issues before publishing.
 
 ### 5. Hallucination Guard
 - Timestamp entries must be in HH:MM:SS format
+- Timeline timestamps should align with raw `transcriptSegments` when available
 - Views must be numeric
 - Dates must match actual upload date from raw data
 

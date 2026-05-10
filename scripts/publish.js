@@ -76,12 +76,15 @@ console.log(`✅ Saved: ${outputFile}`);
 
 const notionToken = process.env.NOTION_TOKEN;
 const notionPageId = process.env.NOTION_PAGE_ID;
+const notionRootTitle = process.env.NOTION_ROOT_TITLE || 'Youtbue Digest';
 
 let notionUrl = 'SKIPPED (no NOTION_TOKEN/NOTION_PAGE_ID set)';
 
 if (notionToken && notionPageId) {
   console.log('📝 Publishing to Notion...');
   try {
+    await tryUpdateParentPageTitle(notionPageId, notionRootTitle, notionToken);
+
     const blocks = markdownToNotionBlocks(finalContent);
     console.log(`   Converted to ${blocks.length} Notion blocks`);
 
@@ -89,7 +92,7 @@ if (notionToken && notionPageId) {
       ? `📺 Channel Digest: @${channelHandle} (${endStr})`
       : isRange
         ? `📺 Weekly Digest ${startStr} ~ ${endStr}`
-        : `📺 YouTube Digest ${endStr}`;
+        : endStr;
 
     const firstBatch = blocks.slice(0, 100);
     const restBatches = [];
@@ -164,6 +167,28 @@ function notionHeaders(token) {
     'Content-Type': 'application/json',
     'Notion-Version': '2022-06-28'
   };
+}
+
+async function tryUpdateParentPageTitle(pageId, targetTitle, token) {
+  try {
+    const res = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+      method: 'PATCH',
+      headers: notionHeaders(token),
+      body: JSON.stringify({
+        properties: {
+          title: {
+            title: [{ text: { content: targetTitle } }]
+          }
+        }
+      })
+    });
+
+    if (!res.ok) {
+      console.log(`   ⚠️  Could not rename parent page title (${res.status})`);
+    }
+  } catch (err) {
+    console.log(`   ⚠️  Could not rename parent page title (${err.message})`);
+  }
 }
 
 function formatDateKo(dateStr) {

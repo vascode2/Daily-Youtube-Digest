@@ -25,7 +25,9 @@ Format final summaries and deliver to output destinations.
 
 ## Notion Page Structure
 - Parent: NOTION_PAGE_ID
-- New child page title: `📺 YouTube Digest YYYY-MM-DD`
+- Parent page title: `Youtbue Digest` (auto-updated by publish step)
+- New daily child page title: `YYYY-MM-DD` (date only)
+- Weekly child page title: `📺 Weekly Digest YYYY-MM-DD ~ YYYY-MM-DD`
 - Content: same as local file, converted to Notion block format
 - Use Notion API: POST /v1/pages
 

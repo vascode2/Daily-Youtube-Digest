@@ -814,56 +814,56 @@ flowchart TD
     <!-- What you get -->
     <section data-reveal>
       <h2>What you actually see</h2>
-      <p class="section-subtitle">A new Notion page lands every morning. Here's exactly what one entry looks like — channel header, video title (clickable), key summary, timeline, and a one-line takeaway.</p>
+      <p class="section-subtitle">A new Notion page lands every morning. Here's exactly what one entry looks like — clickable channel header, clickable video title, one-line takeaway, key summary, and a clickable timeline that jumps to the exact moment in the video.</p>
 
       <div class="notion-mock">
-        <div class="notion-mock-title">📺 YouTube Digest 2026-05-02</div>
+        <div class="notion-mock-title">2026-05-02</div>
         <div class="notion-mock-meta">Generated: 07:15 GMT-4 · Channels: 3 · Videos: 6 · Errors: 0</div>
 
-        <div class="channel-header">📺 AI Engineer</div>
+        <div class="channel-header">📺 <a href="https://www.youtube.com/@aiDotEngineer">AI Engineer</a></div>
 
         <div class="video-title">Building Conversational Agents with Gemini Live API</div>
+        <div class="video-insight">💡 Real-time multimodal agents are getting cheap and fast — worth a serious look for any voice or IoT product.</div>
         <div class="label">Key Summary</div>
-        <div class="video-summary">Google DeepMind engineers walk through building a real-time voice assistant with the new Live API. The session covers WebSocket setup, multimodal streaming input (audio + screen share), and how to invoke tools mid-conversation without breaking the audio loop.</div>
+        <div class="video-summary">Google DeepMind engineers walk through building a real-time voice assistant with the new Live API. The session covers WebSocket setup, multimodal streaming input (audio + screen share), and how to invoke tools mid-conversation without breaking the audio loop.<br /><br />In the live demo they swap a stock prompt for a tool-aware one and show latency dropping from ~900ms to ~250ms once partial audio streaming is enabled, then add a calendar tool call mid-turn to demonstrate uninterrupted speech.</div>
         <div class="label">Key Timeline</div>
         <ul class="timeline-list">
-          <li><code>00:00:42</code> Why streaming-first APIs change agent design</li>
-          <li><code>00:04:18</code> Setting up the WebSocket session and auth</li>
-          <li><code>00:11:30</code> Handling barge-in and turn detection</li>
-          <li><code>00:18:55</code> Tool calls during a live conversation</li>
-          <li><code>00:25:10</code> Production tips: cost, latency, fallbacks</li>
+          <li><a href="#"><code>00:00:42</code></a> Why streaming-first APIs change agent design</li>
+          <li><a href="#"><code>00:04:18</code></a> Setting up the WebSocket session and auth</li>
+          <li><a href="#"><code>00:11:30</code></a> Handling barge-in and turn detection</li>
+          <li><a href="#"><code>00:18:55</code></a> Tool calls during a live conversation</li>
+          <li><a href="#"><code>00:25:10</code></a> Production tips: cost, latency, fallbacks</li>
         </ul>
-        <div class="video-insight">💡 Real-time multimodal agents are getting cheap and fast — worth a serious look for any voice or IoT product.</div>
 
         <hr class="video-divider" />
 
         <div class="video-title">Why Building Eval Platforms Is Hard</div>
+        <div class="video-insight">💡 If you ship AI features, a real eval pipeline matters more than your model choice.</div>
         <div class="label">Key Summary</div>
-        <div class="video-summary">A Braintrust engineer breaks down why "good" is so hard to define for AI outputs. He walks through the labeling, versioning, and team-alignment problems most eval teams hit by month three, and proposes a minimal scoring loop that scales without a full platform.</div>
+        <div class="video-summary">A Braintrust engineer breaks down why "good" is so hard to define for AI outputs. He walks through the labeling, versioning, and team-alignment problems most eval teams hit by month three, and proposes a minimal scoring loop that scales without a full platform.<br /><br />As a concrete example he shows two labelers scoring the same 50 outputs and disagreeing on 18 of them, then demonstrates how a tiny rubric and a paired-review step cut disagreement down to 4 — without buying any new tooling.</div>
         <div class="label">Key Timeline</div>
         <ul class="timeline-list">
-          <li><code>00:01:20</code> The illusion of "we'll just measure quality"</li>
-          <li><code>00:07:45</code> Labelers disagree more than you think</li>
-          <li><code>00:14:02</code> Versioning prompts vs. versioning datasets</li>
-          <li><code>00:22:30</code> A minimal scoring loop that actually works</li>
+          <li><a href="#"><code>00:01:20</code></a> The illusion of "we'll just measure quality"</li>
+          <li><a href="#"><code>00:07:45</code></a> Labelers disagree more than you think</li>
+          <li><a href="#"><code>00:14:02</code></a> Versioning prompts vs. versioning datasets</li>
+          <li><a href="#"><code>00:22:30</code></a> A minimal scoring loop that actually works</li>
         </ul>
-        <div class="video-insight">💡 If you ship AI features, a real eval pipeline matters more than your model choice.</div>
 
         <hr class="video-divider" />
 
-        <div class="channel-header">📺 Career Hacker Alex</div>
+        <div class="channel-header">📺 <a href="https://www.youtube.com/@careerhackeralex">Career Hacker Alex</a></div>
 
         <div class="video-title">The 200-LoC Skill That Replaced 12,000 Lines of Code</div>
+        <div class="video-insight">💡 Markdown-driven workflows are the new "config as code" — most internal tools are over-engineered.</div>
         <div class="label">Key Summary</div>
-        <div class="video-summary">A walkthrough of how an engineer rewrote a complex Git Worktrees feature as a Claude Code Skill — going from 12,000 lines of TypeScript to ~200 lines of plain markdown. Covers the trade-offs, what broke, and where the markdown approach hits its limits.</div>
+        <div class="video-summary">A walkthrough of how an engineer rewrote a complex Git Worktrees feature as a Claude Code Skill — going from 12,000 lines of TypeScript to ~200 lines of plain markdown. Covers the trade-offs, what broke, and where the markdown approach hits its limits.<br /><br />The demo shows the original TypeScript version handling a stale-lock edge case in 80 lines, vs. the markdown skill solving the same case with a single instruction line plus a tool call — a useful example of where prose beats code, and one case where it doesn't.</div>
         <div class="label">Key Timeline</div>
         <ul class="timeline-list">
-          <li><code>00:02:10</code> The original 12K-line implementation</li>
-          <li><code>00:06:40</code> Rewriting it as a markdown skill</li>
-          <li><code>00:13:25</code> Edge cases that the markdown version handles worse</li>
-          <li><code>00:17:50</code> When markdown wins, when it doesn't</li>
+          <li><a href="#"><code>00:02:10</code></a> The original 12K-line implementation</li>
+          <li><a href="#"><code>00:06:40</code></a> Rewriting it as a markdown skill</li>
+          <li><a href="#"><code>00:13:25</code></a> Edge cases that the markdown version handles worse</li>
+          <li><a href="#"><code>00:17:50</code></a> When markdown wins, when it doesn't</li>
         </ul>
-        <div class="video-insight">💡 Markdown-driven workflows are the new "config as code" — most internal tools are over-engineered.</div>
       </div>
     </section>
 

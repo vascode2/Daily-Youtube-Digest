@@ -30,30 +30,29 @@ You don't run anything. Your laptop can be off. Your phone can be in another cou
 A new Notion page every morning, looking roughly like this:
 
 ```
-📺 YouTube Digest 2026-05-02
+📺 YouTube Digest — 2026-05-02
 Generated: 07:15 GMT-4 · Channels: 3 · Videos: 6 · Errors: 0
 
-📺 AI Engineer  ← channel name in red
+📺 AI Engineer  ← clickable channel link, name shown in red
 
-   Building Conversational Agents with Gemini Live API
-   Key Summary
-   > Google DeepMind engineers show how to build a real-time voice
-   > assistant with their new Live API. Covers WebSocket setup,
-   > multimodal input, and tool calls during a live conversation.
-   Key Timeline
-   - 00:04:18  Setting up the WebSocket session
-   - 00:18:55  Tool calls during a live conversation
+   Building Conversational Agents with Gemini Live API   ← clickable
    💡 Real-time multimodal agents are getting cheap and fast.
 
-   Why Building Eval Platforms Is Hard
    Key Summary
-   > A Braintrust engineer breaks down why "good" is hard to
-   > define for AI outputs. Walks through labeling, versioning,
-   > and team-alignment problems most eval teams hit by month 3.
-   💡 If you ship AI features, eval pipeline matters more than model.
+   Google DeepMind engineers walk through the new Live API for
+   building a real-time voice assistant — WebSocket session setup,
+   multimodal input, and tool calls during a live conversation.
+
+   In the demo they swap a stock prompt for a tool-aware one and
+   show latency dropping from ~900ms to ~250ms once partial audio
+   streaming is enabled, then add a calendar tool call mid-turn.
+
+   Key Timeline
+   - 00:04:18  Setting up the WebSocket session   ← clickable, jumps to t=258
+   - 00:18:55  Tool calls during a live conversation
 ```
 
-Every video title is a clickable link to YouTube. Channel headers are red so you can scan fast.
+Every channel header, video title, and timeline timestamp is a clickable link. Channel headers are red so you can scan fast.
 
 ---
 

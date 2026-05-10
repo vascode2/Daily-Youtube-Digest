@@ -21,53 +21,48 @@ Topics of interest:
 - IoT / embedded industry trends
 - AI tools that boost developer productivity (Claude, etc.)
 
-## Language Rules
-- Korean channels (e.g., @dekilab, @bitgapnam, @AI마스터_세인투) → **Korean output**
-- English channels (e.g., @careerhackeralex, @aiDotEngineer) → **Korean summary** (translate insights to Korean for the FAE reader)
-- Be concise. Technical precision over marketing speak.
+## Language & Format Rules
+- Korean channels (e.g., @dekilab, @bitgapnam) → **Korean output**
+- English channels (e.g., @careerhackeralex, @aiDotEngineer) → **Korean summary** (translate to Korean)
+- 핵심 요약은 2-3문단, 문단당 2-3문장 (블록인용 `>` 기호 제거)
+- 핵심 요약에는 발표자가 사용한 예시/데모/비교 사례 최소 1개 포함
+- 간단하고 정확한 한국어 선택
+- 타임라인 timestamps는 반드시 링크 형식: `[HH:MM:SS](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS)`
 
 ## Structure
 ```markdown
 # YouTube Digest — YYYY-MM-DD
 
-### 📺 Channel Display Name 1
+### 📺 [채널명](https://www.youtube.com/@CHANNEL_HANDLE)
 
 ## [Video Title 1](https://www.youtube.com/watch?v=VIDEO_ID)
 
-[핵심 요약 / 주요 타임라인 / 한 줄 인사이트 — see config/format.md]
+💡 한 줄 인사이트 문장
+
+핵심 요약 (단락끼리 스스로 구분, 블록인용 제거)
+
+[주요 타임라인 또는 생략]
 
 ---
 
-## [Video Title 2](https://www.youtube.com/watch?v=VIDEO_ID)
+### 📺 [다른 채널](https://www.youtube.com/@OTHER_CHANNEL)
 
 [...]
-
----
-
-### 📺 Channel Display Name 2
-
-## [Video Title 3](https://www.youtube.com/watch?v=VIDEO_ID)
-
-[...]
-
----
-
-**Channel header rules:**
-- Use the `channelName` field from raw JSON (NOT the `channel` handle)
-- Examples: "AI Engineer" not "@aiDotEngineer", "안될공학 - IT 테크 신기술" not "@unrealtech"
-- publish.js auto-renders these h3 headers in red color in Notion
 ```
 
-**Heading levels matter:**
-- `#` document title (h1)
-- `###` channel handle (h3, less prominent)
-- `##` video title with link (h2, biggest — most prominent)
-- This makes video titles stand out, which is what users scan for
+**중요 규칙:**
+1. 채널 h3 헤딩은 반드시 YouTube 채널 링크로: `### 📺 [채널명](https://www.youtube.com/@HANDLE)`
+2. 영상 h2 헤딩은 YouTube 링크로: `## [제목](https://www.youtube.com/watch?v=VIDEO_ID)`
+3. **섹션 순서 (매우중요)**: 한 줄 인사이트 → 핵심 요약 → 주요 타임라인
+4. **블록인용 제거**: 모든 `>` 기호 제거 (단락끼리 자연스럽게 구분)
+5. 타임라인 timestamps는 YouTube 링크 형식: `[HH:MM:SS](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS)`
 
 ## Rules
 - One section per channel, one subsection per video
 - If transcript is empty/very short (< 200 chars), write: `> 내용 부족 — 요약 불가 (자막/설명 없음)`
 - Timestamps must be in `[HH:MM:SS]` format
+- 주요 타임라인은 raw JSON의 `transcriptSegments`가 있는 경우에만 작성
+- `transcriptSegments`가 없으면 주요 타임라인을 생략하고, 핵심 요약에 `[자막 기반 타임라인 없음]` 문구를 1회 명시
 - Insight (한 줄 인사이트) = exactly 1 sentence, FAE perspective
 - Do NOT invent facts. If unclear, say so.
 

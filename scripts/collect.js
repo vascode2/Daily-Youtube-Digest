@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * collect.js — Fetch recent YouTube videos using yt-dlp
- * Usage: node scripts/collect.js [--days N]
+ * Usage: node scripts/collect.js [--days N] [--date YYYY-MM-DD] [--from YYYY-MM-DD --to YYYY-MM-DD]
  *   --days 1  (default) → yesterday only → tmp/raw-YYYY-MM-DD.json
  *   --days 7            → last 7 days   → tmp/raw-YYYY-MM-DD_to_YYYY-MM-DD.json
  */
@@ -24,20 +24,43 @@ const channelIdx = argv.indexOf('--channel');
 const singleChannel = channelIdx >= 0 ? argv[channelIdx + 1] : null;
 const limitIdx = argv.indexOf('--limit');
 const limit = limitIdx >= 0 ? Math.max(1, parseInt(argv[limitIdx + 1], 10) || 10) : 10;
+const dateIdx = argv.indexOf('--date');
+const dateArg = dateIdx >= 0 ? argv[dateIdx + 1] : null;
+const fromIdx = argv.indexOf('--from');
+const toIdx = argv.indexOf('--to');
+const fromArg = fromIdx >= 0 ? argv[fromIdx + 1] : null;
+const toArg = toIdx >= 0 ? argv[toIdx + 1] : null;
 
 // Date range. Default = UTC, but DIGEST_TIMEZONE env var can shift the
 // reference timezone (e.g. "Asia/Seoul", "America/New_York", or numeric "+09:00", "-05:00").
 // "Yesterday" is computed in this timezone.
 const tzOffsetMs = parseTimezoneOffset(process.env.DIGEST_TIMEZONE);
 const nowAdjusted = new Date(Date.now() + tzOffsetMs);
-const endDate = new Date(nowAdjusted);
+let endDate = new Date(nowAdjusted);
 endDate.setUTCDate(endDate.getUTCDate() - 1);
-const startDate = new Date(endDate);
+let startDate = new Date(endDate);
 startDate.setUTCDate(startDate.getUTCDate() - (days - 1));
+
+if (!singleChannel && dateArg) {
+  assertIsoDate(dateArg, '--date');
+  startDate = new Date(`${dateArg}T00:00:00Z`);
+  endDate = new Date(`${dateArg}T00:00:00Z`);
+}
+
+if (!singleChannel && fromArg && toArg) {
+  assertIsoDate(fromArg, '--from');
+  assertIsoDate(toArg, '--to');
+  startDate = new Date(`${fromArg}T00:00:00Z`);
+  endDate = new Date(`${toArg}T00:00:00Z`);
+  if (startDate > endDate) {
+    console.error('❌ --from must be earlier than or equal to --to');
+    process.exit(1);
+  }
+}
 
 const endStr = endDate.toISOString().split('T')[0];
 const startStr = startDate.toISOString().split('T')[0];
-const key = days > 1 ? `${startStr}_to_${endStr}` : endStr;
+const key = startStr === endStr ? endStr : `${startStr}_to_${endStr}`;
 
 function parseTimezoneOffset(tz) {
   if (!tz) return 0; // UTC default
@@ -58,6 +81,13 @@ function parseTimezoneOffset(tz) {
   } catch {
     console.warn(`Unknown DIGEST_TIMEZONE "${tz}", falling back to UTC`);
     return 0;
+  }
+}
+
+function assertIsoDate(dateValue, flagName) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+    console.error(`❌ ${flagName} must be YYYY-MM-DD format`);
+    process.exit(1);
   }
 }
 
@@ -204,6 +234,7 @@ for (const channel of channels) {
     }
 
     let transcript = '';
+    let transcriptSegments = [];
     let hasTranscript = false;
 
     spawnSync('yt-dlp', [
@@ -222,8 +253,9 @@ for (const channel of channels) {
     const vttFiles = fs.readdirSync(tmpDir).filter(f => f.startsWith(videoId) && f.endsWith('.vtt'));
     if (vttFiles.length > 0) {
       const vttContent = fs.readFileSync(path.join(tmpDir, vttFiles[0]), 'utf8');
-      transcript = parseVTT(vttContent);
-      hasTranscript = transcript.length > 100;
+      transcriptSegments = parseVTTSegments(vttContent);
+      transcript = transcriptSegments.map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
+      hasTranscript = transcriptSegments.length >= 3 && transcript.length > 100;
       vttFiles.forEach(f => fs.unlinkSync(path.join(tmpDir, f)));
     }
 
@@ -238,6 +270,7 @@ for (const channel of channels) {
       uploadDate: uploadDateStr,
       duration: video.duration || 0,
       transcript: transcript || video.description || '',
+      transcriptSegments,
       description: video.description || '',
       hasTranscript
     });
@@ -254,18 +287,38 @@ for (const channel of channels) {
 fs.writeFileSync(outputFile, JSON.stringify(results, null, 2));
 console.log(`\n✅ Saved ${results.length} videos to ${outputFile}`);
 
-function parseVTT(vtt) {
+function parseVTTSegments(vtt) {
+  const segments = [];
+  const blocks = vtt.split(/\r?\n\r?\n+/);
   const seen = new Set();
-  return vtt
-    .split('\n')
-    .filter(l => !l.includes('-->') && !l.startsWith('WEBVTT') && !l.startsWith('NOTE') && !l.match(/^Kind:|^Language:/) && l.trim())
-    .map(l => l.replace(/<[^>]+>/g, '').trim())
-    .filter(l => {
-      if (!l || seen.has(l)) return false;
-      seen.add(l);
-      return true;
-    })
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+
+  for (const block of blocks) {
+    const lines = block.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const tsIdx = lines.findIndex(l => l.includes('-->'));
+    if (tsIdx < 0) continue;
+
+    const timeLine = lines[tsIdx];
+    const m = timeLine.match(/^(\d{2}:\d{2}:\d{2}(?:\.\d{3})?)\s+-->\s+(\d{2}:\d{2}:\d{2}(?:\.\d{3})?)/);
+    if (!m) continue;
+
+    const text = lines
+      .slice(tsIdx + 1)
+      .map(l => l.replace(/<[^>]+>/g, '').trim())
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!text) continue;
+
+    const start = m[1].split('.')[0];
+    const end = m[2].split('.')[0];
+    const dedupKey = `${start}|${text}`;
+    if (seen.has(dedupKey)) continue;
+    seen.add(dedupKey);
+
+    segments.push({ start, end, text });
+  }
+
+  return segments;
 }

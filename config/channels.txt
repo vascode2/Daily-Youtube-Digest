@@ -1,6 +1,7 @@
 # YouTube channels to monitor
 # One handle per line. Lines starting with # are ignored.
 
+# AI how-to
 @careerhackeralex
 @dekilab
 @sv.developer
@@ -9,3 +10,18 @@
 @Claudical
 @AI마스터_세인투
 @aiDotEngineer
+@bitgapnam
+@codefundkimflip
+
+# ─────────────────────
+# ─────────────────────
+
+# AI news
+@DwarkeshPatel
+@WesRoth
+@aiexplained-official
+@TwoMinutePapers
+@ThePrimeTimeagen
+@indydevdan
+@matthew_berman
+@B_ZCF
