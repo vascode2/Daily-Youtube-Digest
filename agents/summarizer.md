@@ -24,9 +24,10 @@ Topics of interest:
 ## Language & Format Rules
 - Korean channels (e.g., @dekilab, @bitgapnam) → **Korean output**
 - English channels (e.g., @careerhackeralex, @aiDotEngineer) → **Korean summary** (translate to Korean)
-- 핵심 요약은 2-3문단, 문단당 2-3문장 (블록인용 `>` 기호 제거)
+- 핵심 요약 = 도입 1~2문장 + **번호 매긴 3~5개 굵은 소제목** + 각 소제목 아래 1~3개 sub-bullet (자세한 골격은 `config/format.md` 참고)
+- sub-bullet에는 자막에서 인용한 **구체적 인명·기업명·숫자·연도**를 넣고, 끝에 **인라인 타임스탬프** `[[HH:MM](youtube_url&t=SECONDS)]`를 붙임
 - 핵심 요약에는 발표자가 사용한 예시/데모/비교 사례 최소 1개 포함
-- 간단하고 정확한 한국어 선택
+- 간단하고 정확한 한국어 선택, 블록인용 `>` 기호 사용 금지
 - 타임라인 timestamps는 반드시 링크 형식: `[HH:MM:SS](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS)`
 
 ## Structure

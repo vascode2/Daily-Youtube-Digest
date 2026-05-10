@@ -70,19 +70,26 @@ for (const block of videoBlocks) {
 
   const summaryText = extractSectionBody(block, '핵심 요약', ['주요 타임라인']);
   const summaryParagraphs = splitParagraphs(summaryText);
-  if (summaryParagraphs.length < 2 || summaryParagraphs.length > 3) {
+  // Accept either: legacy 2-3 prose paragraphs, OR new structured format
+  // (intro + at least 2 numbered points like "1. **제목**" / "2. **제목**").
+  const numberedHeads = (summaryText.match(/^\s*\d+\.\s+\*\*/gm) || []).length;
+  const isStructured = numberedHeads >= 2;
+  if (!isStructured && (summaryParagraphs.length < 2 || summaryParagraphs.length > 3)) {
     issues.push({
       level: 'ERROR',
       video: title,
       check: 'summary_paragraph_count',
-      detail: `핵심 요약 must be 2-3 paragraphs (found ${summaryParagraphs.length})`
+      detail: `핵심 요약 must be 2-3 prose paragraphs OR structured with 2+ numbered points (found ${summaryParagraphs.length} paragraphs, ${numberedHeads} numbered)`
     });
     errorCount++;
-    console.log(`  ❌ ERROR: "${title}" — 핵심 요약 문단 수 ${summaryParagraphs.length}`);
+    console.log(`  ❌ ERROR: "${title}" — 핵심 요약 문단 수 ${summaryParagraphs.length} (구조화 항목 ${numberedHeads}개)`);
   }
 
   const normalizedSummary = summaryParagraphs.join(' ');
-  if (!looksMostlyKorean(normalizedSummary)) {
+  // Structured format intentionally cites English proper nouns / jargon
+  // (e.g., "Mark Andreessen", "Consumer Surplus") inside Korean prose, so
+  // we loosen the dominance ratio when numbered points are present.
+  if (!looksMostlyKorean(normalizedSummary, isStructured ? 0.5 : 1.1)) {
     issues.push({
       level: 'ERROR',
       video: title,
@@ -268,11 +275,11 @@ function splitParagraphs(text) {
     .filter(Boolean);
 }
 
-function looksMostlyKorean(text) {
+function looksMostlyKorean(text, minHangulOverLatin = 1.1) {
   const hangul = (text.match(/[가-힣]/g) || []).length;
   const latin = (text.match(/[A-Za-z]/g) || []).length;
   if (!text.trim()) return false;
-  return hangul >= Math.max(30, latin * 1.1);
+  return hangul >= Math.max(30, latin * minHangulOverLatin);
 }
 
 function parseHms(hms) {
