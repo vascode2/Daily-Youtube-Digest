@@ -64,9 +64,11 @@ Topics of interest:
 - Timestamps must be in `[HH:MM:SS]` format
 - 주요 타임라인은 raw JSON의 `transcriptSegments`가 있는 경우에만 작성
 - `transcriptSegments`가 없으면 주요 타임라인을 생략하고, 핵심 요약에 `[자막 기반 타임라인 없음]` 문구를 1회 명시
-- Insight (한 줄 인사이트) = exactly 1 sentence, FAE perspective
-- **인사이트는 영상마다 고유해야 함** — 같은 다이제스트 안의 다른 영상과 동일한 문장(또는 거의 같은 보일러플레이트) 금지. 각 영상이 다루는 구체적 기술/판단/사례에서만 도출
-- **핵심 요약 첫 문단을 영상 제목으로 시작하지 말 것** — 제목은 이미 h2 헤딩에 있으므로, 첫 문단은 핵심 주장/결론으로 바로 시작
+- Insight (한 줄 인사이트) = exactly 1 sentence summarizing the video's most important claim/number/judgment. **No FAE-perspective or '실무 적용' boilerplate** — stay faithful to the video itself.
+- **인사이트는 영상마다 고유해야 함** — 같은 다이제스트 안의 다른 영상과 동일한 문장(또는 거의 같은 보일러플레이트) 금지
+- **핵심 요약 첫 문단을 영상 제목으로 시작하지 말 것** — 제목은 이미 h2 헤딩에 있음
+- **핵심 요약 본문에 takeaway/FAE 관점/실무 적용 같은 일반론 마무리 문장을 덧붙이지 말 것** — 영상이 실제로 말한 내용만 정리
+- 주요 타임라인 섹션은 **선택 사항** — sub-bullet마다 인라인 타임스탬프(`[[HH:MM](url&t=)]`)가 박혀 있으면 별도 섹션 생략 권장
 - Do NOT invent facts. If unclear, say so.
 
 ## Process

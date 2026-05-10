@@ -57,12 +57,16 @@ for (const block of videoBlocks) {
       console.log(`  ❌ ERROR: "${title}" — missing section: ${section}`);
     }
   }
-  // 주요 타임라인 is optional — only warn if missing (often unavailable for videos without transcripts)
+  // 주요 타임라인 is optional — only warn if missing.
+  // It can also be replaced by inline timestamps in the structured summary body
+  // (computed below as `inlineStamps`); we re-check after that count is known.
+  const summaryTextEarly = extractSectionBody(block, '핵심 요약', ['주요 타임라인']);
+  const earlyInlineStamps = (summaryTextEarly.match(/\[\[?\d{1,2}:\d{2}(?::\d{2})?\]?\]\(https?:\/\/[^)]*[?&]t=\d+/g) || []).length;
   for (const section of transcriptOnlyRequired) {
-    if ((raw?.hasTranscript || ((raw?.transcriptSegments || []).length >= 3)) && !block.includes(section)) {
-      issues.push({ level: 'ERROR', video: title, check: 'missing_section', detail: `Missing: ${section}` });
+    if ((raw?.hasTranscript || ((raw?.transcriptSegments || []).length >= 3)) && !block.includes(section) && earlyInlineStamps < 3) {
+      issues.push({ level: 'ERROR', video: title, check: 'missing_section', detail: `Missing: ${section} (and <3 inline timestamps in body)` });
       errorCount++;
-      console.log(`  ❌ ERROR: "${title}" — missing section: ${section} (transcript available)`);
+      console.log(`  ❌ ERROR: "${title}" — missing section: ${section} (transcript available, no inline stamps)`);
     } else if (!raw?.hasTranscript && !block.includes(section)) {
       issues.push({ level: 'WARNING', video: title, check: 'missing_section', detail: `Missing: ${section}` });
     }
@@ -137,9 +141,12 @@ for (const block of videoBlocks) {
   }
 
   const timestamps = block.match(/\[\d+:\d+:\d+\]/g) || [];
-  const badTimestamps = block.match(/\[\d+:\d+\](?!:)/g) || [];
+  // Inline summary timestamps `[MM:SS](url&t=)` are intentionally compact and
+  // already correct as markdown links — exclude them from the MM:SS→HH:MM:SS
+  // auto-fix (which only targets the legacy timeline-section format).
+  const badTimestamps = block.match(/\[\d+:\d+\](?![:(])/g) || [];
   if (badTimestamps.length > timestamps.length) {
-    content = content.replace(/\[(\d+):(\d+)\](?!:)/g, (_, m, s) => `[00:${m.padStart(2,'0')}:${s.padStart(2,'0')}]`);
+    content = content.replace(/\[(\d+):(\d+)\](?![:(])/g, (_, m, s) => `[00:${m.padStart(2,'0')}:${s.padStart(2,'0')}]`);
     issues.push({ level: 'WARNING', video: title, check: 'timestamp_format', detail: 'Auto-fixed MM:SS → HH:MM:SS', fixed: true });
     fixCount++;
     console.log(`  🔧 Fixed timestamp format in: "${title}"`);
@@ -164,8 +171,12 @@ for (const block of videoBlocks) {
     errorCount++;
   }
 
-  if ((raw?.transcriptSegments || []).length >= 3 && timelineLines.length < 3) {
-    issues.push({ level: 'ERROR', video: title, check: 'timeline_length', detail: `Expected at least 3 timeline entries (found ${timelineLines.length})` });
+  // Inline timestamps in the structured summary body count as timeline coverage —
+  // we no longer require a separate '주요 타임라인' section when the body has them.
+  const inlineStamps = (summaryText.match(/\[\[?\d{1,2}:\d{2}(?::\d{2})?\]?\]\(https?:\/\/[^)]*[?&]t=\d+/g) || []).length;
+
+  if ((raw?.transcriptSegments || []).length >= 3 && timelineLines.length < 3 && inlineStamps < 3) {
+    issues.push({ level: 'ERROR', video: title, check: 'timeline_length', detail: `Expected at least 3 timeline entries OR 3+ inline timestamps in the body (found ${timelineLines.length} timeline lines, ${inlineStamps} inline)` });
     errorCount++;
   }
 

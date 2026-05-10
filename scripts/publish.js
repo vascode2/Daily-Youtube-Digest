@@ -65,11 +65,17 @@ const header = `${titleHeading}
 ---
 `;
 
-// Strip any pre-existing top-level title and quote/stats line, plus an opening divider if present
-const stripped = summaries
-  .replace(/^#\s+[^\n]*\n+/, '')           // top H1 line
-  .replace(/^>\s+[^\n]*\n+/, '')           // optional quote/stats line
-  .replace(/^---\s*\n+/, '');              // optional divider
+// Strip any pre-existing top-level title, ALL leading quote/stats lines (publish
+// can be re-run on the same output file, so multiple '> 생성: ...' lines may have
+// accumulated), and any opening divider.
+let stripped = summaries.replace(/^#\s+[^\n]*\n+/, '');
+// Remove leading quote-block / divider lines repeatedly until none remain.
+while (/^>\s+[^\n]*\n+/.test(stripped) || /^---\s*\n+/.test(stripped) || /^\s*\n/.test(stripped)) {
+  stripped = stripped
+    .replace(/^>\s+[^\n]*\n+/, '')
+    .replace(/^---\s*\n+/, '')
+    .replace(/^\s*\n/, '');
+}
 const finalContent = header + stripped;
 fs.writeFileSync(outputFile, finalContent);
 console.log(`✅ Saved: ${outputFile}`);
