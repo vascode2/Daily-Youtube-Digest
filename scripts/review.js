@@ -31,6 +31,9 @@ const issues = [];
 let errorCount = 0;
 let fixCount = 0;
 
+// Track insights across the whole digest to catch duplicates.
+const insightToTitles = new Map();
+
 const alwaysRequired = ['핵심 요약', '한 줄 인사이트'];
 const transcriptOnlyRequired = ['주요 타임라인']; // only required when transcript is available
 // Split on standalone --- separators (not table separators like |---|)
@@ -101,6 +104,31 @@ for (const block of videoBlocks) {
     console.log(`  ❌ ERROR: "${title}" — 핵심 요약에 사례/데모가 없음`);
   }
 
+  // Forbid 핵심 요약 from echoing the video title in its first paragraph.
+  // Title is already shown in the h2 above; restating it wastes the slot.
+  const firstPara = summaryParagraphs[0] || '';
+  const titleWords = title.split(/[\s\-—–:|()|,\.]+/).filter(w => w.length >= 4);
+  const titleHead = titleWords.slice(0, 4).join(' ');
+  const titleStarts = [
+    title,
+    titleHead,
+    title.split(/[\-—–:|]/)[0].trim()
+  ].filter(s => s && s.length >= 6);
+  const startsWithTitle = titleStarts.some(t =>
+    firstPara.startsWith(t) || firstPara.startsWith(`${t}는`) || firstPara.startsWith(`${t}은`) ||
+    firstPara.startsWith(`${t}이`) || firstPara.startsWith(`${t}가`) || firstPara.startsWith(`"${t}"`)
+  );
+  if (startsWithTitle) {
+    issues.push({
+      level: 'ERROR',
+      video: title,
+      check: 'summary_starts_with_title',
+      detail: '핵심 요약 must NOT start with the video title (title is already in the h2 above)'
+    });
+    errorCount++;
+    console.log(`  ❌ ERROR: "${title}" — 핵심 요약이 영상 제목으로 시작함`);
+  }
+
   const timestamps = block.match(/\[\d+:\d+:\d+\]/g) || [];
   const badTimestamps = block.match(/\[\d+:\d+\](?!:)/g) || [];
   if (badTimestamps.length > timestamps.length) {
@@ -163,6 +191,27 @@ for (const block of videoBlocks) {
       issues.push({ level: 'WARNING', video: title, check: 'insight_length', detail: `Too long: ${sentences} sentences` });
       console.log(`  ⚠️  WARNING: "${title}" — 한 줄 인사이트 too long (${sentences} sentences)`);
     }
+    // Track for cross-video duplicate detection.
+    const norm = insight.replace(/^💡\s*/, '').replace(/\s+/g, ' ').trim();
+    if (norm) {
+      if (!insightToTitles.has(norm)) insightToTitles.set(norm, []);
+      insightToTitles.get(norm).push(title);
+    }
+  }
+}
+
+// Cross-video: insights must be unique. Generic, copy-pasted insights are
+// a strong signal that the summarizer fell back to a template instead of
+// reading each transcript.
+for (const [insight, titles] of insightToTitles.entries()) {
+  if (titles.length > 1) {
+    issues.push({
+      level: 'ERROR',
+      check: 'insight_duplicate',
+      detail: `한 줄 인사이트 duplicated across ${titles.length} videos: ${titles.map(t => `"${t}"`).join(', ')}`
+    });
+    errorCount++;
+    console.log(`  ❌ ERROR: 한 줄 인사이트 중복 — ${titles.length}개 영상이 동일: ${titles.slice(0, 3).map(t => `"${t}"`).join(', ')}${titles.length > 3 ? ', …' : ''}`);
   }
 }
 

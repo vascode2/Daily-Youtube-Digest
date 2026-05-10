@@ -64,6 +64,8 @@ Topics of interest:
 - 주요 타임라인은 raw JSON의 `transcriptSegments`가 있는 경우에만 작성
 - `transcriptSegments`가 없으면 주요 타임라인을 생략하고, 핵심 요약에 `[자막 기반 타임라인 없음]` 문구를 1회 명시
 - Insight (한 줄 인사이트) = exactly 1 sentence, FAE perspective
+- **인사이트는 영상마다 고유해야 함** — 같은 다이제스트 안의 다른 영상과 동일한 문장(또는 거의 같은 보일러플레이트) 금지. 각 영상이 다루는 구체적 기술/판단/사례에서만 도출
+- **핵심 요약 첫 문단을 영상 제목으로 시작하지 말 것** — 제목은 이미 h2 헤딩에 있으므로, 첫 문단은 핵심 주장/결론으로 바로 시작
 - Do NOT invent facts. If unclear, say so.
 
 ## Process

@@ -114,6 +114,38 @@ if (process.env.YOUTUBE_COOKIES_B64) {
   cookiesFile = path.join(tmpDir, 'cookies.txt');
   fs.writeFileSync(cookiesFile, Buffer.from(process.env.YOUTUBE_COOKIES_B64, 'base64'));
   console.log(`🍪 Using YouTube cookies from env (${fs.statSync(cookiesFile).size} bytes)`);
+
+  // Cookie-expiry check: Netscape format columns are
+  //   domain  flag  path  secure  expiration  name  value
+  // Warn loudly if the most-recently-expiring auth cookie is < 7 days away.
+  try {
+    const cookieText = fs.readFileSync(cookiesFile, 'utf8');
+    const nowSec = Math.floor(Date.now() / 1000);
+    const authNames = new Set(['SID', 'HSID', 'SSID', 'APISID', 'SAPISID', '__Secure-1PSID', '__Secure-3PSID']);
+    let maxAuthExpiry = 0;
+    for (const line of cookieText.split('\n')) {
+      if (!line || line.startsWith('#')) continue;
+      const parts = line.split('\t');
+      if (parts.length < 7) continue;
+      const expiry = parseInt(parts[4], 10);
+      const name = parts[5];
+      if (!Number.isFinite(expiry) || expiry === 0) continue;
+      if (authNames.has(name)) maxAuthExpiry = Math.max(maxAuthExpiry, expiry);
+    }
+    if (maxAuthExpiry > 0) {
+      const daysLeft = Math.floor((maxAuthExpiry - nowSec) / 86400);
+      if (maxAuthExpiry < nowSec) {
+        console.error(`❌ COOKIE EXPIRED — YouTube auth cookies in YOUTUBE_COOKIES_B64 expired ${Math.abs(daysLeft)} day(s) ago. Refresh per README step 7.`);
+        process.exit(2); // distinct exit code so CI can flag this clearly
+      } else if (daysLeft <= 7) {
+        console.warn(`⚠️  COOKIE EXPIRES SOON — auth cookies expire in ${daysLeft} day(s). Refresh per README step 7 before they break the daily run.`);
+      } else {
+        console.log(`   cookies valid for ~${daysLeft} more day(s)`);
+      }
+    }
+  } catch (err) {
+    console.warn(`   (cookie expiry check skipped: ${err.message})`);
+  }
 }
 const cookieArgs = cookiesFile ? ['--cookies', cookiesFile] : [];
 
@@ -148,21 +180,28 @@ if (ytdlpCheck.error || ytdlpCheck.status !== 0) {
 const startStrYtdlp = startStr.replace(/-/g, '');
 const endStrYtdlp = endStr.replace(/-/g, '');
 
-const results = [];
 const PLAYLIST_END = mode === 'channel' ? limit : Math.max(10, days * 5);
 
-for (const channel of channels) {
+// Concurrency: how many channels to fetch in parallel.
+// Default 5 keeps us under YouTube's per-IP burst limit while cutting wall-time ~5x.
+const concurrencyIdx = argv.indexOf('--concurrency');
+const concurrency = Math.max(1, Math.min(
+  10,
+  concurrencyIdx >= 0 ? parseInt(argv[concurrencyIdx + 1], 10) || 5 :
+    parseInt(process.env.DIGEST_CONCURRENCY || '', 10) || 5
+));
+console.log(`⚙️  Concurrency: ${concurrency} channel${concurrency > 1 ? 's' : ''} in parallel\n`);
+
+// Per-channel fetch — pure function, safe to run in parallel.
+function fetchChannel(channel) {
   const handle = channel.startsWith('@') ? channel : `@${channel}`;
   const url = `https://www.youtube.com/${handle}/videos`;
+  const out = [];
+  const log = [];
+  const push = (msg) => log.push(msg);
 
-  console.log(`Fetching ${handle}...`);
+  push(`Fetching ${handle}...`);
 
-  // Single call: fetch full metadata for the last N videos at once.
-  // More robust than per-video metadata calls (which YouTube often rate-limits on cloud IPs).
-  // --ignore-no-formats-error: don't fail when YouTube returns metadata without playable formats
-  //   (we don't need formats — we just want title/upload_date/etc)
-  // --extractor-args player_client=...: try multiple YouTube clients in order
-  //   (some IPs/cookies are blocked on certain clients but work on others)
   const listResult = spawnSync('yt-dlp', [
     ...cookieArgs,
     '--dump-json',
@@ -177,34 +216,32 @@ for (const channel of channels) {
 
   if (listResult.status !== 0 && !listResult.stdout) {
     const stderr = (listResult.stderr || '').split('\n').filter(Boolean).slice(0, 3).join(' | ');
-    console.error(`  ❌ yt-dlp failed: ${stderr.slice(0, 400)}`);
-    continue;
+    push(`  ❌ yt-dlp failed: ${stderr.slice(0, 400)}`);
+    return { handle, videos: out, log };
   }
   if (listResult.stderr && listResult.stderr.length > 0) {
     const errLines = listResult.stderr.split('\n').filter(l => l.trim() && !l.includes('WARNING')).slice(0, 2).join(' | ');
-    if (errLines) console.log(`  ⚠️  yt-dlp stderr: ${errLines.slice(0, 300)}`);
+    if (errLines) push(`  ⚠️  yt-dlp stderr: ${errLines.slice(0, 300)}`);
   }
 
-  // Each line is one video's JSON
   const videos = listResult.stdout.split('\n').filter(Boolean).map(l => {
     try { return JSON.parse(l); } catch { return null; }
   }).filter(Boolean);
 
   if (videos.length === 0) {
-    console.log(`  ⏭️  No videos in metadata response`);
-    continue;
+    push(`  ⏭️  No videos in metadata response`);
+    return { handle, videos: out, log };
   }
-  console.log(`  → Got ${videos.length} videos with full metadata`);
-  if (videos[0]) console.log(`     newest upload_date: ${videos[0].upload_date} (target: ${startStrYtdlp}..${endStrYtdlp})`);
+  push(`  → Got ${videos.length} videos with full metadata`);
+  if (videos[0]) push(`     newest upload_date: ${videos[0].upload_date} (target: ${startStrYtdlp}..${endStrYtdlp})`);
 
   let matched = 0;
   let savedThisChannel = 0;
 
   for (const video of videos) {
-    // Per-channel cap (counts videos actually saved, not just date-matched)
     const cap = mode === 'channel' ? limit : maxPerChannel;
     if (cap > 0 && savedThisChannel >= cap) {
-      console.log(`  🛑 Reached cap of ${cap} videos for this channel`);
+      push(`  🛑 Reached cap of ${cap} videos for this channel`);
       break;
     }
 
@@ -213,7 +250,6 @@ for (const channel of channels) {
 
     const uploadDate = video.upload_date;
     if (!uploadDate) continue;
-    // In channel mode, skip date filtering (take all N most recent)
     if (mode !== 'channel') {
       if (uploadDate < startStrYtdlp) break;
       if (uploadDate > endStrYtdlp) continue;
@@ -228,7 +264,7 @@ for (const channel of channels) {
         titleLower.includes(kw.toLowerCase()) || descLower.includes(kw.toLowerCase())
       );
       if (!ok) {
-        console.log(`  ⏭️  Skipped (no keyword): ${video.title}`);
+        push(`  ⏭️  Skipped (no keyword): ${video.title}`);
         continue;
       }
     }
@@ -256,12 +292,12 @@ for (const channel of channels) {
       transcriptSegments = parseVTTSegments(vttContent);
       transcript = transcriptSegments.map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
       hasTranscript = transcriptSegments.length >= 3 && transcript.length > 100;
-      vttFiles.forEach(f => fs.unlinkSync(path.join(tmpDir, f)));
+      vttFiles.forEach(f => { try { fs.unlinkSync(path.join(tmpDir, f)); } catch {} });
     }
 
     const uploadDateStr = `${uploadDate.slice(0,4)}-${uploadDate.slice(4,6)}-${uploadDate.slice(6,8)}`;
 
-    results.push({
+    out.push({
       channel: handle,
       channelName: video.channel || video.uploader || handle,
       videoId,
@@ -276,16 +312,64 @@ for (const channel of channels) {
     });
     savedThisChannel++;
 
-    console.log(`  📝 [${uploadDateStr}] ${video.title} ${hasTranscript ? '' : '(desc only)'}`);
+    push(`  📝 [${uploadDateStr}] ${video.title} ${hasTranscript ? '' : '(desc only)'}`);
   }
 
-  if (matched === 0) {
-    console.log(`  ⏭️  No videos in range`);
-  }
+  if (matched === 0) push(`  ⏭️  No videos in range`);
+  return { handle, videos: out, log };
+}
+
+// Tiny concurrency limiter — runs `tasks` with at most `n` in flight.
+async function runWithConcurrency(items, n, taskFn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      // spawnSync inside still blocks this worker, but other workers run
+      // concurrently in their own microtask queues — the OS schedules the
+      // child processes in parallel. Net effect: ~Nx wall-time speedup.
+      results[i] = await Promise.resolve().then(() => taskFn(items[i]));
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+const channelResults = await runWithConcurrency(channels, concurrency, fetchChannel);
+
+// Print logs in original channel order so output stays readable
+const results = [];
+let okChannels = 0;
+let failedChannels = 0;
+for (const r of channelResults) {
+  for (const line of r.log) console.log(line);
+  results.push(...r.videos);
+  if (r.log.some(l => l.includes('❌'))) failedChannels++;
+  else okChannels++;
 }
 
 fs.writeFileSync(outputFile, JSON.stringify(results, null, 2));
 console.log(`\n✅ Saved ${results.length} videos to ${outputFile}`);
+console.log(`   Channels: ${okChannels} ok, ${failedChannels} failed`);
+
+// Empty-collection alert: distinguishes "no uploads yesterday" (normal) from
+// "every channel exploded" (cookies expired / IP banned / yt-dlp broken).
+// Multi-day runs (--days 7) where 0 videos came back from N>=10 channels are
+// almost always a systemic failure, not a quiet day.
+if (mode !== 'channel') {
+  const allFailed = channels.length > 0 && failedChannels === channels.length;
+  const suspiciousEmpty = results.length === 0 && (days >= 3 || channels.length >= 8);
+  if (allFailed) {
+    console.error(`\n❌ ALL ${channels.length} channels failed. Likely cause: cookies expired, IP blocked, or yt-dlp outdated. Check earlier ❌ lines.`);
+    process.exit(3); // CI flag: systemic failure
+  } else if (suspiciousEmpty) {
+    console.warn(`\n⚠️  EMPTY COLLECTION — 0 videos across ${channels.length} channels over ${days} day(s). Possible auth/cookie issue or YouTube rate-limit. Investigate before assuming a quiet day.`);
+    // Don't exit non-zero here — a genuinely quiet weekend can match this.
+    // CI workflow will see "0 videos" in the summarize/publish steps and skip.
+  }
+}
 
 function parseVTTSegments(vtt) {
   const segments = [];

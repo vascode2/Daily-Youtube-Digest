@@ -66,7 +66,9 @@ jobs:
             STOP immediately after writing tmp/summaries-<KEY>.md. Do not run any other commands. Do not modify output/ or any other location."
 
       - name: Review summaries
-        run: npm run review || echo "Review had warnings but not blocking"
+        id: review
+        continue-on-error: true
+        run: npm run review
 
       - name: Publish to Notion + repo
         env:
@@ -92,3 +94,9 @@ jobs:
             sleep 3
           done
           echo "Push failed after 3 retries"; exit 1
+
+      - name: Fail workflow if review reported errors
+        if: always() && steps.review.outcome == 'failure'
+        run: |
+          echo "::error::Review found quality issues — see the 'Review summaries' step above. Output was published anyway."
+          exit 1
