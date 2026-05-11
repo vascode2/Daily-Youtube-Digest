@@ -1,17 +1,17 @@
 # Daily YouTube Digest — Project Guide
 
 ## Purpose
-Automatically collect, summarize, and publish YouTube video summaries from watched channels every morning. GitHub Actions uses Gemini for summarization, while this file still documents the local agent workflow.
+Automatically collect, summarize, and publish YouTube video summaries from watched channels every morning. GitHub Actions uses Claude Code for summarization.
 
 ## Tech Stack
 - Runtime: Node.js v22+
 - YouTube data: yt-dlp (CLI tool)
-- AI summarization: **Gemini API** in GitHub Actions via `scripts/summarize-gemini.js`
+- AI summarization: **Claude Code CLI** in GitHub Actions with Claude Sonnet 4.6
 - Output: Markdown files + optional Notion API
 
 ## Workflow Overview
 1. **Collect** (Node script) — yt-dlp fetches yesterday's videos + transcripts
-2. **Summarize** (Gemini) — `scripts/summarize-gemini.js` reads raw JSON and writes summaries following `config/format.md`
+2. **Summarize** (Claude Code) — Claude reads raw JSON and writes summaries following `config/format.md`
 3. **Review** (Node script) — Validates structure and auto-fixes formatting
 4. **Publish** (Node script) — Saves to `output/YYYY-MM-DD.md` and optionally Notion
 
@@ -34,10 +34,7 @@ npm run collect:week      # weekly (last 7 days)
 Creates `tmp/raw-{key}.json` where key is either `YYYY-MM-DD` or `YYYY-MM-DD_to_YYYY-MM-DD`.
 
 ### Step 2: Summarize
-```bash
-npm run summarize
-```
-Uses `GEMINI_API_KEY` and `GEMINI_MODEL` (default: `gemini-3-fast`) to read the latest `tmp/raw-{key}.json` and write `tmp/summaries-{key}.md`.
+GitHub Actions runs Claude Code with `CLAUDE_MODEL=claude-sonnet-4-6` to read the latest `tmp/raw-{key}.json` and write `tmp/summaries-{key}.md`.
 
 ### Step 3: Review
 ```bash
@@ -65,12 +62,12 @@ Tell the user the output file path, channel/video counts, and any errors.
 
 ## Environment Variables (optional)
 ```
-GEMINI_API_KEY=...            # Required: Gemini summarization
-GEMINI_MODEL=gemini-3-fast    # Optional: default model
+CLAUDE_CODE_OAUTH_TOKEN=...   # Required: Claude Code summarization
+CLAUDE_MODEL=claude-sonnet-4-6 # Optional: default model in workflows
 NOTION_TOKEN=secret_...       # Optional: enables Notion publishing
 NOTION_PAGE_ID=...            # Optional: parent page for digests
 ```
-**No ANTHROPIC_API_KEY needed** — summarization runs through Gemini.
+**No ANTHROPIC_API_KEY needed** — summarization runs through Claude Code OAuth.
 
 ## Error Handling
 - yt-dlp fails for a channel → log error, skip channel, continue

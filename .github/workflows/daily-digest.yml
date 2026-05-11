@@ -26,10 +26,14 @@ jobs:
           sudo chmod a+rx /usr/local/bin/yt-dlp
           yt-dlp --version
 
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
       - name: Verify tools
         run: |
           node --version
           yt-dlp --version
+          claude --version
 
       - name: Collect yesterday's videos
         env:
@@ -37,10 +41,10 @@ jobs:
           DIGEST_TIMEZONE: America/New_York   # User in EST/EDT
         run: npm run collect
 
-      - name: Summarize via Gemini
+      - name: Summarize via Claude Code
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: gemini-3-fast
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_MODEL: claude-sonnet-4-6
         run: npm run summarize
 
       - name: Review summaries

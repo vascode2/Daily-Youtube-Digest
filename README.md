@@ -60,7 +60,7 @@ Every channel header, video title, and inline timestamp is a clickable link. Cha
 
 Most "AI summary" tools charge you per summary because they use a paid API.
 
-This system uses the **Gemini API** for summarization. The workflow defaults to `gemini-3-fast`, which keeps the digest fast while preserving better long-context coverage for video transcripts.
+This system uses **Claude Code** for summarization. The workflow defaults to Claude Sonnet 4.6 for better long-context coverage of video transcripts.
 
 GitHub Actions (the cloud runner) is also free for public repos. Notion API is free.
 
@@ -83,11 +83,12 @@ You only do this once. After it's done, the daily run happens forever without yo
 ### 1. Required accounts (free)
 - [GitHub](https://github.com) — hosts the code and runs the daily job
 - [Notion](https://notion.so) — destination for digests
-- Google AI Studio / Gemini API key — for summarization
+- Claude account — for summarization. Pro subscription recommended.
 
 ### 2. Required tools (free, install once)
 - [Node.js](https://nodejs.org) v22+
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp/releases) (only needed if you want to test locally)
+- [Claude Code CLI](https://docs.claude.com/en/docs/agents-and-tools/claude-code/overview) — `npm install -g @anthropic-ai/claude-code`
 
 ### 3. Fork or clone
 ```bash
@@ -110,8 +111,12 @@ Edit [config/channels.txt](config/channels.txt) — one YouTube handle per line:
 4. On that page: **`···`** menu → **Connections** → add your `YouTube Digest` integration
 5. Copy the page's URL — the 32-character ID at the end is your `NOTION_PAGE_ID`
 
-### 6. Get a Gemini API key
-Create a Gemini API key in Google AI Studio and keep it ready for GitHub Actions secrets.
+### 6. Get a Claude Code token
+In your terminal:
+```bash
+claude setup-token
+```
+Copy the `sk-ant-oat01-...` token from the terminal output.
 
 ### 7. Get YouTube cookies (so the cloud server isn't blocked)
 1. Install the Chrome extension [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
@@ -129,7 +134,7 @@ Go to https://github.com/YOUR_USERNAME/Daily-Youtube-Digest/settings/secrets/act
 
 | Name | Value |
 |------|-------|
-| `GEMINI_API_KEY` | the Gemini API key from step 6 |
+| `CLAUDE_CODE_OAUTH_TOKEN` | the `sk-ant-oat01-...` token from step 6 |
 | `NOTION_TOKEN` | the `ntn_...` token from step 5 |
 | `NOTION_PAGE_ID` | the 32-char page ID from step 5 |
 | `YOUTUBE_COOKIES_B64` | the base64 cookies from step 7 |
@@ -174,7 +179,7 @@ That's it. Tomorrow at 7 AM it runs by itself.
 | Tone, audience, language | `agents/summarizer.md` |
 | When the daily runs | `cron:` line in `.github/workflows/daily-digest.yml` |
 | Filter videos by keyword | uncomment lines in `config/keywords.txt` |
-| Switch summarization model | `GEMINI_MODEL` in workflow files or `.env` |
+| Switch summarization model | `CLAUDE_MODEL` in workflow files |
 
 ---
 
@@ -182,7 +187,7 @@ That's it. Tomorrow at 7 AM it runs by itself.
 
 **"No videos collected"** — yesterday simply had no uploads from your channels, OR your YouTube cookies expired. Refresh the cookies (step 7 above) every ~60 days.
 
-**"Gemini API failed"** — check that `GEMINI_API_KEY` is set in GitHub Actions secrets and that `GEMINI_MODEL` is available for your account.
+**"You've hit your limit"** — Claude Pro has a rolling usage window. If you've been chatting with Claude a lot, the workflow shares that quota. Wait until the limit resets or upgrade your subscription.
 
 **Notion page not appearing** — check that the parent page is shared with your `YouTube Digest` integration (Connections menu). Then refresh Notion.
 
@@ -199,4 +204,4 @@ MIT. Use it, fork it, modify it.
 ## Credits
 
 - Original concept inspired by [@dekilab](https://www.youtube.com/@dekilab)'s Claude Code workflow tutorial
-- Built with Gemini, [yt-dlp](https://github.com/yt-dlp/yt-dlp), and [Notion API](https://developers.notion.com)
+- Built with [Claude Code](https://claude.com/claude-code), [yt-dlp](https://github.com/yt-dlp/yt-dlp), and [Notion API](https://developers.notion.com)
