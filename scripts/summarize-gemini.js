@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * summarize-gemini.js — Generate tmp/summaries-*.md from the latest tmp/raw-*.json
- * using the fastest available Gemini model that supports generateContent.
+ * using the fastest available Gemini text model that supports generateContent.
  */
 
 import fs from 'fs';
@@ -17,12 +17,14 @@ const preferredModel = process.env.GEMINI_MODEL || 'gemini-3-fast';
 const fallbackModels = (process.env.GEMINI_MODEL_FALLBACKS || [
   'gemini-3-fast',
   'gemini-3-flash',
-  'gemini-3.0-flash',
-  'gemini-3.0-flash-lite',
+  'gemini-3-flash-preview',
+  'gemini-3.1-flash-lite',
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
   'gemini-2.0-flash',
-  'gemini-1.5-flash'
+  'gemini-2.0-flash-lite',
+  'gemini-flash-latest',
+  'gemini-flash-lite-latest'
 ].join(','))
   .split(',')
   .map(model => model.trim())
@@ -42,15 +44,13 @@ if (!rawFile) {
 const key = path.basename(rawFile).replace(/^raw-/, '').replace(/\.json$/, '');
 const summariesFile = path.join(tmpDir, `summaries-${key}.md`);
 const rawItems = JSON.parse(fs.readFileSync(rawFile, 'utf8'));
-const formatGuide = fs.readFileSync(path.join(ROOT, 'config', 'format.md'), 'utf8');
-const summarizerGuide = fs.readFileSync(path.join(ROOT, 'agents', 'summarizer.md'), 'utf8');
 
-console.log(`🔎 Resolving Gemini model, preferred: ${preferredModel}`);
+console.log(`🔎 Resolving Gemini text model, preferred: ${preferredModel}`);
 const availableModels = await listGenerateContentModels(apiKey);
 const modelCandidates = chooseModelCandidates({ preferredModel, fallbackModels, availableModels });
 
 if (modelCandidates.length === 0) {
-  console.error('❌ No Gemini models that support generateContent are available for this API key.');
+  console.error('❌ No Gemini text models that support generateContent are available for this API key.');
   console.error('   Check the API key, billing/quota, and Google AI Studio model access.');
   process.exit(1);
 }
@@ -59,12 +59,37 @@ console.log(`🧠 Summarizing ${rawItems.length} video(s)`);
 console.log(`   Raw: ${path.relative(ROOT, rawFile)}`);
 console.log(`   Model candidates: ${modelCandidates.join(', ')}`);
 
-const prompt = buildPrompt({ key, rawItems, formatGuide, summarizerGuide });
-const { markdown, model } = await generateWithFallback({ apiKey, modelCandidates, prompt });
-const cleaned = cleanMarkdown(markdown);
+const channelOrder = [];
+const channelSections = new Map();
+let selectedModel = null;
 
-fs.writeFileSync(summariesFile, cleaned.endsWith('\n') ? cleaned : `${cleaned}\n`);
-console.log(`✅ Wrote: ${path.relative(ROOT, summariesFile)} using ${model}`);
+for (let index = 0; index < rawItems.length; index++) {
+  const item = rawItems[index];
+  const handle = normalizeChannelHandle(item.channel);
+  const channelKey = `${handle}\n${item.channelName || handle}`;
+  if (!channelSections.has(channelKey)) {
+    channelOrder.push(channelKey);
+    channelSections.set(channelKey, {
+      heading: `### 📺 [${item.channelName || handle}](https://www.youtube.com/${handle})`,
+      videos: []
+    });
+  }
+
+  console.log(`\n▶️  Video ${index + 1}/${rawItems.length}: ${item.title}`);
+  const prompt = buildVideoPrompt(item);
+  const result = await generateVideoWithFallback({
+    apiKey,
+    modelCandidates: selectedModel ? [selectedModel, ...modelCandidates.filter(model => model !== selectedModel)] : modelCandidates,
+    prompt,
+    videoTitle: item.title
+  });
+  selectedModel = result.model;
+  channelSections.get(channelKey).videos.push(cleanVideoBlock(result.markdown, item));
+  fs.writeFileSync(summariesFile, renderDigest({ key, channelOrder, channelSections }));
+  console.log(`   ✅ Done with ${result.model}`);
+}
+
+console.log(`\n✅ Wrote: ${path.relative(ROOT, summariesFile)} using ${selectedModel || 'unknown model'}`);
 
 function findLatestRaw(dir) {
   if (!fs.existsSync(dir)) return null;
@@ -80,13 +105,14 @@ async function listGenerateContentModels(apiKey) {
   const response = await fetch(url);
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Gemini ListModels failed (${response.status}): ${text.slice(0, 1000)}`);
+    throw new Error(`Gemini ListModels failed (${response.status}): ${compactErrorText(text)}`);
   }
 
   const data = await response.json();
   return (data.models || [])
     .filter(model => (model.supportedGenerationMethods || []).includes('generateContent'))
     .map(model => normalizeModelName(model.name))
+    .filter(isLikelyTextModel)
     .filter(Boolean);
 }
 
@@ -100,13 +126,13 @@ function chooseModelCandidates({ preferredModel, fallbackModels, availableModels
   const discoveredFastModels = availableModels
     .map(normalizeModelName)
     .filter(model => /gemini/i.test(model) && /(fast|flash)/i.test(model))
+    .filter(isLikelyTextModel)
     .sort(compareGeminiPreference);
 
-  return [...explicitCandidates, ...discoveredFastModels]
-    .filter(unique);
+  return [...explicitCandidates, ...discoveredFastModels].filter(unique);
 }
 
-async function generateWithFallback({ apiKey, modelCandidates, prompt }) {
+async function generateVideoWithFallback({ apiKey, modelCandidates, prompt, videoTitle }) {
   const errors = [];
 
   for (const model of modelCandidates) {
@@ -115,16 +141,33 @@ async function generateWithFallback({ apiKey, modelCandidates, prompt }) {
       const markdown = await generateWithGemini({ apiKey, model, prompt });
       return { markdown, model };
     } catch (err) {
-      errors.push(`${model}: ${err.message}`);
-      console.warn(`   ⚠️  ${model} failed: ${err.message.slice(0, 300)}`);
+      const info = classifyGeminiError(err);
+      errors.push(`${model}: ${info.summary}`);
+      console.warn(`   ⚠️  ${model} failed: ${info.summary}`);
+
+      if (info.retryAfterMs > 0 && info.retryAfterMs <= 65000) {
+        console.warn(`   ↻ Waiting ${Math.ceil(info.retryAfterMs / 1000)}s for Gemini quota retry hint, then retrying ${model} once`);
+        await delay(info.retryAfterMs + 250);
+        try {
+          const markdown = await generateWithGemini({ apiKey, model, prompt });
+          return { markdown, model };
+        } catch (retryErr) {
+          const retryInfo = classifyGeminiError(retryErr);
+          errors.push(`${model} retry: ${retryInfo.summary}`);
+          console.warn(`   ⚠️  ${model} retry failed: ${retryInfo.summary}`);
+          if (retryInfo.isQuota) throw quotaError({ videoTitle, errors, retryAfterMs: retryInfo.retryAfterMs });
+        }
+      }
+
+      if (info.isQuota) throw quotaError({ videoTitle, errors, retryAfterMs: info.retryAfterMs });
     }
   }
 
-  throw new Error(`All Gemini model candidates failed:\n${errors.join('\n')}`);
+  throw new Error(`All Gemini text model candidates failed for "${videoTitle}".\n${errors.join('\n')}`);
 }
 
-function buildPrompt({ key, rawItems, formatGuide, summarizerGuide }) {
-  const compactItems = rawItems.map(item => ({
+function buildVideoPrompt(item) {
+  const video = {
     channel: item.channel,
     channelName: item.channelName,
     videoId: item.videoId,
@@ -134,34 +177,33 @@ function buildPrompt({ key, rawItems, formatGuide, summarizerGuide }) {
     transcript: item.transcript,
     transcriptSegments: item.transcriptSegments || [],
     description: item.description || ''
-  }));
+  };
 
-  return `You are generating a Korean YouTube digest markdown file.
+  return `Write ONE Korean YouTube digest video block in markdown. Return only this video block.
 
-Return ONLY the final markdown. Do not wrap it in a code fence. Do not explain your work.
+Required shape:
+## [${item.title}](https://www.youtube.com/watch?v=${item.videoId})
 
-Digest key: ${key}
-First line must be exactly: # YouTube Digest — ${key}
+**한 줄 인사이트**
+💡 One distinct Korean sentence with the most important claim/number/judgment.
 
-SOURCE OF TRUTH: config/format.md
-${formatGuide}
+**핵심 요약**
+Intro 1-2 Korean sentences, then numbered bold subheadings with as many bullets as needed for full context.
 
-SOURCE OF TRUTH: agents/summarizer.md
-${summarizerGuide}
+Rules:
+- Do not write **주요 타임라인**.
+- Do not force 3-5 points; full context matters more.
+- Include concrete names/companies/numbers/years from the transcript.
+- Include at least one example/demo/case/comparison if present.
+- For transcriptSegments, add inline timestamp links like [[12:34](https://www.youtube.com/watch?v=${item.videoId}&t=754)] across early/middle/late meaningful parts.
+- For long videos, do not cite only the first few minutes.
+- If transcriptSegments are missing, write [자막 기반 타임라인 없음] once and do not invent timestamps.
+- Do not include views, upload date, duration, or transcript indicators.
+- Do not add FAE/takeaway/general advice that the video did not say.
+- English source videos must still be summarized in Korean.
 
-Additional non-negotiable requirements:
-- Generate 한 줄 인사이트 and 핵심 요약 for every video.
-- Do NOT generate a separate **주요 타임라인** section.
-- Do NOT force a fixed number of 핵심 요약 points. Use as many numbered points and bullets as needed to capture the full video context.
-- For videos with transcriptSegments, inline timestamps must cover the meaningful beginning, middle, and late parts of the video when those parts contain substantive content.
-- For long videos, do not stop at timestamps from only the first few minutes.
-- Each inline timestamp must use the same video ID and a correct t=SECONDS link.
-- If transcriptSegments are missing, say [자막 기반 타임라인 없음] once in 핵심 요약 and summarize from transcript/description without inventing timestamps.
-- Preserve channel grouping with channel headings formatted as ### 📺 [ChannelName](https://www.youtube.com/@handle).
-- Separate videos with ---.
-
-Raw video data JSON:
-${JSON.stringify(compactItems, null, 2)}
+Raw video JSON:
+${JSON.stringify(video, null, 2)}
 `;
 }
 
@@ -182,7 +224,10 @@ async function generateWithGemini({ apiKey, model, prompt }) {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Gemini API failed (${response.status}): ${text.slice(0, 1000)}`);
+    const error = new Error(`Gemini API failed (${response.status}): ${compactErrorText(text)}`);
+    error.status = response.status;
+    error.body = text;
+    throw error;
   }
 
   const data = await response.json();
@@ -192,15 +237,82 @@ async function generateWithGemini({ apiKey, model, prompt }) {
     .join('')
     .trim();
 
-  if (!text) {
-    throw new Error('Gemini API returned no text.');
-  }
-
+  if (!text) throw new Error('Gemini API returned no text.');
   return text;
+}
+
+function renderDigest({ key, channelOrder, channelSections }) {
+  const parts = [`# YouTube Digest — ${key}`, ''];
+  for (const channelKey of channelOrder) {
+    const section = channelSections.get(channelKey);
+    parts.push(section.heading, '', section.videos.join('\n\n---\n\n'));
+    parts.push('', '---', '');
+  }
+  return parts.join('\n').replace(/\n{4,}/g, '\n\n\n').trimEnd() + '\n';
+}
+
+function cleanVideoBlock(markdown, item) {
+  let block = cleanMarkdown(markdown);
+  block = block.replace(/^#\s+[^\n]+\n+/, '').trim();
+  if (!/^##\s+\[/.test(block)) {
+    block = `## [${item.title}](https://www.youtube.com/watch?v=${item.videoId})\n\n${block}`;
+  }
+  return block;
+}
+
+function classifyGeminiError(err) {
+  const body = err.body || err.message || '';
+  let parsed = null;
+  try { parsed = JSON.parse(body); } catch {}
+  const message = parsed?.error?.message || err.message || 'Unknown Gemini error';
+  const status = parsed?.error?.status || '';
+  const retryAfterMs = extractRetryAfterMs(message);
+  const isQuota = err.status === 429 || status === 'RESOURCE_EXHAUSTED' || /quota|rate-limit|rate limit|RESOURCE_EXHAUSTED/i.test(message);
+  return {
+    isQuota,
+    retryAfterMs,
+    summary: `${err.status || 'ERR'} ${status ? `${status}: ` : ''}${message.split('\n')[0]}`.slice(0, 500)
+  };
+}
+
+function quotaError({ videoTitle, errors, retryAfterMs }) {
+  const retryText = retryAfterMs > 0 ? ` Gemini suggested retrying after ~${Math.ceil(retryAfterMs / 1000)}s.` : '';
+  return new Error([
+    `Gemini quota/rate limit exhausted while summarizing "${videoTitle}".${retryText}`,
+    'This is an account/quota issue, not a bad model name.',
+    'Options: wait for the free-tier quota window to reset, enable billing/increase quota, reduce collected videos, or use a different API key.',
+    'Recent model attempts:',
+    ...errors.slice(-5)
+  ].join('\n'));
+}
+
+function extractRetryAfterMs(message) {
+  const secondsMatch = String(message).match(/retry in\s+([\d.]+)s/i);
+  if (secondsMatch) return Math.ceil(Number(secondsMatch[1]) * 1000);
+  const msMatch = String(message).match(/retry in\s+([\d.]+)ms/i);
+  if (msMatch) return Math.ceil(Number(msMatch[1]));
+  return 0;
+}
+
+function compactErrorText(text) {
+  return String(text || '')
+    .replace(/\s+/g, ' ')
+    .replace(/"quotaMetric"\s*:\s*"[^"]+"/g, '"quotaMetric":"..."')
+    .slice(0, 900);
+}
+
+function normalizeChannelHandle(channel) {
+  const value = String(channel || '').trim();
+  if (!value) return '@unknown';
+  return value.startsWith('@') ? value : `@${value}`;
 }
 
 function normalizeModelName(modelName) {
   return String(modelName || '').replace(/^models\//, '').trim();
+}
+
+function isLikelyTextModel(model) {
+  return /gemini/i.test(model) && !/(image|tts|embedding|veo|imagen|aqa)/i.test(model);
 }
 
 function compareGeminiPreference(a, b) {
@@ -210,12 +322,14 @@ function compareGeminiPreference(a, b) {
 function modelScore(model) {
   const lower = model.toLowerCase();
   let score = 0;
-  if (lower.includes('3')) score += 300;
+  if (lower.includes('3.1')) score += 310;
+  else if (lower.includes('3')) score += 300;
   if (lower.includes('2.5')) score += 250;
   if (lower.includes('2.0')) score += 200;
   if (lower.includes('fast')) score += 40;
   if (lower.includes('flash')) score += 30;
   if (lower.includes('lite')) score -= 10;
+  if (lower.includes('latest')) score += 5;
   if (lower.includes('preview')) score -= 5;
   return score;
 }
@@ -229,4 +343,8 @@ function cleanMarkdown(markdown) {
     .replace(/^```(?:markdown|md)?\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
