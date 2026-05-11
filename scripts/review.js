@@ -31,11 +31,23 @@ const issues = [];
 let errorCount = 0;
 let fixCount = 0;
 
+const strippedTimelineCount = (content.match(/^\*\*주요 타임라인\*\*/gm) || []).length;
+if (strippedTimelineCount > 0) {
+  content = stripTimelineSections(content);
+  issues.push({
+    level: 'WARNING',
+    check: 'timeline_section_removed',
+    detail: `Removed ${strippedTimelineCount} separate 주요 타임라인 section(s); timestamps belong inline in 핵심 요약`,
+    fixed: true
+  });
+  fixCount += strippedTimelineCount;
+  console.log(`  🔧 Removed ${strippedTimelineCount} separate 주요 타임라인 section(s)`);
+}
+
 // Track insights across the whole digest to catch duplicates.
 const insightToTitles = new Map();
 
 const alwaysRequired = ['핵심 요약', '한 줄 인사이트'];
-const transcriptOnlyRequired = ['주요 타임라인']; // only required when transcript is available
 // Split on standalone --- separators (not table separators like |---|)
 // Video blocks are identified by their h2 title with a link: `## [Title](url)`
 // Channel headers (### 📺 @handle) are NOT video blocks — they're metadata
@@ -57,21 +69,6 @@ for (const block of videoBlocks) {
       console.log(`  ❌ ERROR: "${title}" — missing section: ${section}`);
     }
   }
-  // 주요 타임라인 is optional — only warn if missing.
-  // It can also be replaced by inline timestamps in the structured summary body
-  // (computed below as `inlineStamps`); we re-check after that count is known.
-  const summaryTextEarly = extractSectionBody(block, '핵심 요약', ['주요 타임라인']);
-  const earlyInlineStamps = (summaryTextEarly.match(/\[\[?\d{1,2}:\d{2}(?::\d{2})?\]?\]\(https?:\/\/[^)]*[?&]t=\d+/g) || []).length;
-  for (const section of transcriptOnlyRequired) {
-    if ((raw?.hasTranscript || ((raw?.transcriptSegments || []).length >= 3)) && !block.includes(section) && earlyInlineStamps < 3) {
-      issues.push({ level: 'ERROR', video: title, check: 'missing_section', detail: `Missing: ${section} (and <3 inline timestamps in body)` });
-      errorCount++;
-      console.log(`  ❌ ERROR: "${title}" — missing section: ${section} (transcript available, no inline stamps)`);
-    } else if (!raw?.hasTranscript && !block.includes(section)) {
-      issues.push({ level: 'WARNING', video: title, check: 'missing_section', detail: `Missing: ${section}` });
-    }
-  }
-
   const summaryText = extractSectionBody(block, '핵심 요약', ['주요 타임라인']);
   const summaryParagraphs = splitParagraphs(summaryText);
   // Accept either: legacy 2-3 prose paragraphs, OR new structured format
@@ -152,53 +149,51 @@ for (const block of videoBlocks) {
     console.log(`  🔧 Fixed timestamp format in: "${title}"`);
   }
 
-  const timelineBody = extractSectionBody(block, '주요 타임라인', []);
-  const timelineLines = timelineBody.split('\n').map(l => l.trim()).filter(l => l.startsWith('- '));
-  const timelineSec = [];
-  let timelineMalformed = false;
+  // Inline timestamps in the structured summary body provide the jump links.
+  const inlineStampSeconds = extractInlineTimestampSeconds(summaryText);
+  const inlineStamps = inlineStampSeconds.length;
 
-  for (const line of timelineLines) {
-    const m = line.match(/^-\s*\[(\d{2}:\d{2}:\d{2})\]\s*(.+)$/);
-    if (!m) {
-      timelineMalformed = true;
-      continue;
-    }
-    timelineSec.push(parseHms(m[1]));
-  }
-
-  if (timelineLines.length > 0 && timelineMalformed) {
-    issues.push({ level: 'ERROR', video: title, check: 'timeline_format', detail: 'Timeline lines must be `- [HH:MM:SS] content` or `- [HH:MM:SS](URL) content`' });
+  if ((raw?.transcriptSegments || []).length >= 3 && inlineStamps < 3) {
+    issues.push({ level: 'ERROR', video: title, check: 'inline_timestamp_length', detail: `Expected at least 3 inline timestamps in 핵심 요약 (found ${inlineStamps})` });
     errorCount++;
   }
 
-  // Inline timestamps in the structured summary body count as timeline coverage —
-  // we no longer require a separate '주요 타임라인' section when the body has them.
-  const inlineStamps = (summaryText.match(/\[\[?\d{1,2}:\d{2}(?::\d{2})?\]?\]\(https?:\/\/[^)]*[?&]t=\d+/g) || []).length;
-
-  if ((raw?.transcriptSegments || []).length >= 3 && timelineLines.length < 3 && inlineStamps < 3) {
-    issues.push({ level: 'ERROR', video: title, check: 'timeline_length', detail: `Expected at least 3 timeline entries OR 3+ inline timestamps in the body (found ${timelineLines.length} timeline lines, ${inlineStamps} inline)` });
+  if (raw?.duration && inlineStampSeconds.some(t => t > raw.duration)) {
+    issues.push({ level: 'ERROR', video: title, check: 'inline_timestamp_out_of_range', detail: '핵심 요약 contains timestamp beyond video duration' });
     errorCount++;
   }
 
-  if (raw?.duration && timelineSec.some(t => t > raw.duration)) {
-    issues.push({ level: 'ERROR', video: title, check: 'timeline_out_of_range', detail: 'Timeline contains timestamp beyond video duration' });
-    errorCount++;
+  if (!isSorted(inlineStampSeconds)) {
+    issues.push({ level: 'WARNING', video: title, check: 'inline_timestamp_order', detail: 'Inline timestamps are not ascending' });
   }
 
-  if (!isSorted(timelineSec)) {
-    issues.push({ level: 'WARNING', video: title, check: 'timeline_order', detail: 'Timeline timestamps are not ascending' });
-  }
-
-  if ((raw?.transcriptSegments || []).length >= 3 && timelineSec.length > 0) {
+  if ((raw?.transcriptSegments || []).length >= 3 && inlineStampSeconds.length > 0) {
     const segmentSec = raw.transcriptSegments.map(s => parseHms(s.start));
-    const unmatched = timelineSec.filter(t => !segmentSec.some(s => Math.abs(s - t) <= 120));
+    const unmatched = inlineStampSeconds.filter(t => !segmentSec.some(s => Math.abs(s - t) <= 120));
     if (unmatched.length > 0) {
-      issues.push({ level: 'WARNING', video: title, check: 'timeline_alignment', detail: 'Some timeline timestamps do not align with transcript segments (±120s)' });
+      issues.push({ level: 'WARNING', video: title, check: 'inline_timestamp_alignment', detail: 'Some inline timestamps do not align with transcript segments (±120s)' });
     }
   }
 
-  if (!(raw?.transcriptSegments || []).length && timelineLines.length > 0) {
-    issues.push({ level: 'WARNING', video: title, check: 'timeline_source', detail: 'Timeline present without transcriptSegments; accuracy may be low' });
+  if (raw?.duration && raw.duration >= 900 && inlineStampSeconds.length >= 3) {
+    const latest = Math.max(...inlineStampSeconds);
+    const coverageRatio = latest / raw.duration;
+    if (coverageRatio < 0.55) {
+      issues.push({
+        level: 'ERROR',
+        video: title,
+        check: 'inline_timestamp_coverage',
+        detail: `Long video summary only cites through ${formatHms(latest)} of ${formatHms(raw.duration)}; include middle/late context`
+      });
+      errorCount++;
+    } else if (coverageRatio < 0.75) {
+      issues.push({
+        level: 'WARNING',
+        video: title,
+        check: 'inline_timestamp_coverage',
+        detail: `Inline timestamps cover only ${Math.round(coverageRatio * 100)}% of video duration; check late-video context`
+      });
+    }
   }
 
   const insightMatch = block.match(/한 줄 인사이트[^\n]*\n(.*)/);
@@ -272,6 +267,17 @@ function extractSectionBody(block, sectionTitle, nextSections = []) {
   return m ? m[1].trim() : '';
 }
 
+function stripTimelineSections(markdown) {
+  return markdown
+    .replace(/\n\*\*주요 타임라인\*\*\s*\n[\s\S]*?(?=\n---\s*\n|\n###\s+📺|\n##\s+\[|$)/g, '\n')
+    .replace(/\n{3,}(?=\n?---)/g, '\n\n');
+}
+
+function extractInlineTimestampSeconds(text) {
+  const matches = [...text.matchAll(/\[\[?\d{1,2}:\d{2}(?::\d{2})?\]?\]\(https?:\/\/[^)]*[?&]t=(\d+)/g)];
+  return matches.map(match => Number(match[1])).filter(Number.isFinite);
+}
+
 function splitParagraphs(text) {
   if (!text) return [];
   const unquoted = text
@@ -296,6 +302,13 @@ function looksMostlyKorean(text, minHangulOverLatin = 1.1) {
 function parseHms(hms) {
   const [h, m, s] = hms.split(':').map(Number);
   return h * 3600 + m * 60 + s;
+}
+
+function formatHms(totalSeconds) {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 function isSorted(values) {

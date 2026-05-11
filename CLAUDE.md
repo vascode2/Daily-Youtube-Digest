@@ -1,17 +1,17 @@
 # Daily YouTube Digest — Project Guide
 
 ## Purpose
-Automatically collect, summarize, and publish YouTube video summaries from watched channels every morning. **Claude Code itself does the summarization — no Anthropic API key required.**
+Automatically collect, summarize, and publish YouTube video summaries from watched channels every morning. GitHub Actions uses Gemini for summarization, while this file still documents the local agent workflow.
 
 ## Tech Stack
 - Runtime: Node.js v22+
 - YouTube data: yt-dlp (CLI tool)
-- AI summarization: **Claude Code (this CLI you're using)** — reads files, writes summaries directly
+- AI summarization: **Gemini API** in GitHub Actions via `scripts/summarize-gemini.js`
 - Output: Markdown files + optional Notion API
 
 ## Workflow Overview
 1. **Collect** (Node script) — yt-dlp fetches yesterday's videos + transcripts
-2. **Summarize** (Claude Code) — Claude reads raw JSON, writes summaries following `config/format.md`
+2. **Summarize** (Gemini) — `scripts/summarize-gemini.js` reads raw JSON and writes summaries following `config/format.md`
 3. **Review** (Node script) — Validates structure and auto-fixes formatting
 4. **Publish** (Node script) — Saves to `output/YYYY-MM-DD.md` and optionally Notion
 
@@ -33,15 +33,11 @@ npm run collect:week      # weekly (last 7 days)
 ```
 Creates `tmp/raw-{key}.json` where key is either `YYYY-MM-DD` or `YYYY-MM-DD_to_YYYY-MM-DD`.
 
-### Step 2: Summarize (you do this — no API call)
-1. Read the newly created `tmp/raw-{key}.json` (the only raw-*.json file in tmp)
-2. Read `config/format.md` for the required output format
-3. Read `agents/summarizer.md` for tone and audience guidance
-4. For each video, write a summary in the exact format from `config/format.md`
-5. Group summaries by channel under `## @channelhandle` headings
-   - For weekly: optionally subgroup videos by upload date within each channel
-6. Write to `tmp/summaries-{key}.md` (same key as the raw file).
-   Header: `# YouTube Digest — {key}` (the publish step rewrites this header)
+### Step 2: Summarize
+```bash
+npm run summarize
+```
+Uses `GEMINI_API_KEY` and `GEMINI_MODEL` (default: `gemini-3-fast`) to read the latest `tmp/raw-{key}.json` and write `tmp/summaries-{key}.md`.
 
 ### Step 3: Review
 ```bash
@@ -69,10 +65,12 @@ Tell the user the output file path, channel/video counts, and any errors.
 
 ## Environment Variables (optional)
 ```
+GEMINI_API_KEY=...            # Required: Gemini summarization
+GEMINI_MODEL=gemini-3-fast    # Optional: default model
 NOTION_TOKEN=secret_...       # Optional: enables Notion publishing
 NOTION_PAGE_ID=...            # Optional: parent page for digests
 ```
-**No ANTHROPIC_API_KEY needed** — summarization runs through Claude Code.
+**No ANTHROPIC_API_KEY needed** — summarization runs through Gemini.
 
 ## Error Handling
 - yt-dlp fails for a channel → log error, skip channel, continue

@@ -17,7 +17,7 @@ This project fixes that. Every morning at 7 AM:
 
 1. A computer in the cloud (not yours) wakes up.
 2. It checks each channel on your list for new videos uploaded yesterday.
-3. It reads each video's transcript and writes a 2–4 sentence summary, plus key timestamps and a one-line takeaway.
+3. It reads each video's transcript and writes a structured summary with inline timestamps and a one-line takeaway.
 4. It drops everything into a fresh page in your Notion.
 5. You wake up, open Notion, and skim the digest. Two minutes, done.
 
@@ -43,16 +43,16 @@ Generated: 07:15 GMT-4 · Channels: 3 · Videos: 6 · Errors: 0
    building a real-time voice assistant — WebSocket session setup,
    multimodal input, and tool calls during a live conversation.
 
-   In the demo they swap a stock prompt for a tool-aware one and
-   show latency dropping from ~900ms to ~250ms once partial audio
-   streaming is enabled, then add a calendar tool call mid-turn.
+   1. Live API setup
+      - They open a WebSocket session and stream partial audio so the
+        assistant can start responding before the full turn ends. [04:18]
 
-   Key Timeline
-   - 00:04:18  Setting up the WebSocket session   ← clickable, jumps to t=258
-   - 00:18:55  Tool calls during a live conversation
+   2. Tool calls during conversation
+      - In the demo they swap a stock prompt for a tool-aware one and
+        add a calendar tool call mid-turn. [18:55]
 ```
 
-Every channel header, video title, and timeline timestamp is a clickable link. Channel headers are red so you can scan fast.
+Every channel header, video title, and inline timestamp is a clickable link. Channel headers are red so you can scan fast.
 
 ---
 
@@ -60,7 +60,7 @@ Every channel header, video title, and timeline timestamp is a clickable link. C
 
 Most "AI summary" tools charge you per summary because they use a paid API.
 
-This system reuses your **Claude Pro subscription** (the same one you use for chatting). One-time setup: copy a token, paste it into GitHub. After that, every run is covered by your subscription. **Added cost: $0.**
+This system uses the **Gemini API** for summarization. The workflow defaults to `gemini-3-fast`, which keeps the digest fast while preserving better long-context coverage for video transcripts.
 
 GitHub Actions (the cloud runner) is also free for public repos. Notion API is free.
 
@@ -83,12 +83,11 @@ You only do this once. After it's done, the daily run happens forever without yo
 ### 1. Required accounts (free)
 - [GitHub](https://github.com) — hosts the code and runs the daily job
 - [Notion](https://notion.so) — destination for digests
-- Claude account — for summarization. Pro subscription recommended (saves money) but a free Claude account also works.
+- Google AI Studio / Gemini API key — for summarization
 
 ### 2. Required tools (free, install once)
 - [Node.js](https://nodejs.org) v22+
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp/releases) (only needed if you want to test locally)
-- [Claude Code CLI](https://docs.claude.com/en/docs/agents-and-tools/claude-code/overview) — `npm install -g @anthropic-ai/claude-code`
 
 ### 3. Fork or clone
 ```bash
@@ -111,12 +110,8 @@ Edit [config/channels.txt](config/channels.txt) — one YouTube handle per line:
 4. On that page: **`···`** menu → **Connections** → add your `YouTube Digest` integration
 5. Copy the page's URL — the 32-character ID at the end is your `NOTION_PAGE_ID`
 
-### 6. Get a Claude Code token
-In your terminal:
-```bash
-claude setup-token
-```
-Copy the `sk-ant-oat01-…` token from the terminal output.
+### 6. Get a Gemini API key
+Create a Gemini API key in Google AI Studio and keep it ready for GitHub Actions secrets.
 
 ### 7. Get YouTube cookies (so the cloud server isn't blocked)
 1. Install the Chrome extension [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
@@ -134,7 +129,7 @@ Go to https://github.com/YOUR_USERNAME/Daily-Youtube-Digest/settings/secrets/act
 
 | Name | Value |
 |------|-------|
-| `CLAUDE_CODE_OAUTH_TOKEN` | the `sk-ant-oat01-...` token from step 6 |
+| `GEMINI_API_KEY` | the Gemini API key from step 6 |
 | `NOTION_TOKEN` | the `ntn_...` token from step 5 |
 | `NOTION_PAGE_ID` | the 32-char page ID from step 5 |
 | `YOUTUBE_COOKIES_B64` | the base64 cookies from step 7 |
@@ -151,7 +146,7 @@ That's it. Tomorrow at 7 AM it runs by itself.
 ```
 .
 ├── docs/index.html             # Visual walkthrough (this is what github.io serves)
-├── CLAUDE.md                   # Instructions Claude Code reads to understand the project
+├── CLAUDE.md                   # Project guide for local agent workflows
 ├── agents/                     # Sub-agent role definitions (collect/summarize/review/publish)
 ├── config/
 │   ├── channels.txt            # Your YouTube channel list
@@ -179,7 +174,7 @@ That's it. Tomorrow at 7 AM it runs by itself.
 | Tone, audience, language | `agents/summarizer.md` |
 | When the daily runs | `cron:` line in `.github/workflows/daily-digest.yml` |
 | Filter videos by keyword | uncomment lines in `config/keywords.txt` |
-| Switch to a faster/cheaper model | `--model` flag in workflow files |
+| Switch summarization model | `GEMINI_MODEL` in workflow files or `.env` |
 
 ---
 
@@ -187,7 +182,7 @@ That's it. Tomorrow at 7 AM it runs by itself.
 
 **"No videos collected"** — yesterday simply had no uploads from your channels, OR your YouTube cookies expired. Refresh the cookies (step 7 above) every ~60 days.
 
-**"You've hit your limit"** — Claude Pro has a 5-hour rolling usage window. If you've been chatting with Claude a lot, the workflow shares that quota. Wait until the limit resets or upgrade your subscription.
+**"Gemini API failed"** — check that `GEMINI_API_KEY` is set in GitHub Actions secrets and that `GEMINI_MODEL` is available for your account.
 
 **Notion page not appearing** — check that the parent page is shared with your `YouTube Digest` integration (Connections menu). Then refresh Notion.
 
@@ -204,4 +199,4 @@ MIT. Use it, fork it, modify it.
 ## Credits
 
 - Original concept inspired by [@dekilab](https://www.youtube.com/@dekilab)'s Claude Code workflow tutorial
-- Built with [Claude Code](https://claude.com/claude-code), [yt-dlp](https://github.com/yt-dlp/yt-dlp), [Notion API](https://developers.notion.com)
+- Built with Gemini, [yt-dlp](https://github.com/yt-dlp/yt-dlp), and [Notion API](https://developers.notion.com)
