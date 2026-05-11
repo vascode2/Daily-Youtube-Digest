@@ -1,17 +1,17 @@
 # Daily YouTube Digest — Project Guide
 
 ## Purpose
-Automatically collect, summarize, and publish YouTube video summaries from watched channels every morning. GitHub Actions uses Claude Code for summarization.
+Automatically collect, summarize, and publish YouTube video summaries from watched channels every morning. GitHub Actions uses Gemini for summarization.
 
 ## Tech Stack
 - Runtime: Node.js v22+
 - YouTube data: yt-dlp (CLI tool)
-- AI summarization: **Claude Code CLI** in GitHub Actions with Claude Sonnet 4.6
+- AI summarization: **Gemini API** in GitHub Actions with automatic fast/flash model fallback
 - Output: Markdown files + optional Notion API
 
 ## Workflow Overview
 1. **Collect** (Node script) — yt-dlp fetches yesterday's videos + transcripts
-2. **Summarize** (Claude Code) — Claude reads raw JSON and writes summaries following `config/format.md`
+2. **Summarize** (Gemini) — `scripts/summarize-gemini.js` reads raw JSON and writes summaries following `config/format.md`
 3. **Review** (Node script) — Validates structure and auto-fixes formatting
 4. **Publish** (Node script) — Saves to `output/YYYY-MM-DD.md` and optionally Notion
 
@@ -34,7 +34,7 @@ npm run collect:week      # weekly (last 7 days)
 Creates `tmp/raw-{key}.json` where key is either `YYYY-MM-DD` or `YYYY-MM-DD_to_YYYY-MM-DD`.
 
 ### Step 2: Summarize
-GitHub Actions runs Claude Code with `CLAUDE_MODEL=claude-sonnet-4-6` to read the latest `tmp/raw-{key}.json` and write `tmp/summaries-{key}.md`.
+GitHub Actions runs `npm run summarize`, which uses `GEMINI_API_KEY`, tries `GEMINI_MODEL=gemini-3-fast` first, lists available models, and falls back to the fastest available Gemini flash/fast model that supports `generateContent`.
 
 ### Step 3: Review
 ```bash
@@ -62,12 +62,13 @@ Tell the user the output file path, channel/video counts, and any errors.
 
 ## Environment Variables (optional)
 ```
-CLAUDE_CODE_OAUTH_TOKEN=...   # Required: Claude Code summarization
-CLAUDE_MODEL=claude-sonnet-4-6 # Optional: default model in workflows
+GEMINI_API_KEY=...            # Required: Gemini summarization
+GEMINI_MODEL=gemini-3-fast    # Optional: preferred model
+GEMINI_MODEL_FALLBACKS=...    # Optional: comma-separated fallback model list
 NOTION_TOKEN=secret_...       # Optional: enables Notion publishing
 NOTION_PAGE_ID=...            # Optional: parent page for digests
 ```
-**No ANTHROPIC_API_KEY needed** — summarization runs through Claude Code OAuth.
+**No ANTHROPIC_API_KEY needed** — summarization runs through Gemini.
 
 ## Error Handling
 - yt-dlp fails for a channel → log error, skip channel, continue

@@ -2,12 +2,12 @@
   "name": "daily-youtube-digest",
   "version": "1.0.0",
   "type": "module",
-  "description": "Daily YouTube video digest generator using Claude Code (no API key required)",
+  "description": "Daily YouTube video digest generator using Gemini for summarization",
   "scripts": {
     "collect": "node --env-file-if-exists=.env scripts/collect.js",
     "collect:week": "node --env-file-if-exists=.env scripts/collect.js --days 7 --max-per-channel 3",
     "collect:channel": "node --env-file-if-exists=.env scripts/collect.js --channel",
-    "summarize": "node --env-file-if-exists=.env scripts/summarize-claude.js",
+    "summarize": "node --env-file-if-exists=.env scripts/summarize-gemini.js",
     "review": "node --env-file-if-exists=.env scripts/review.js",
     "publish": "node --env-file-if-exists=.env scripts/publish.js",
     "test": "node tests/test-pipeline.js"
