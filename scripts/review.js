@@ -103,13 +103,12 @@ for (const block of videoBlocks) {
 
   if (!/(예를 들어|예시|사례|데모|실험|비교)/.test(normalizedSummary)) {
     issues.push({
-      level: 'ERROR',
+      level: 'WARNING',
       video: title,
       check: 'summary_examples',
-      detail: '핵심 요약 must include at least one concrete example/demo/case'
+      detail: '핵심 요약 has no concrete example/demo/case; acceptable when keeping the summary short'
     });
-    errorCount++;
-    console.log(`  ❌ ERROR: "${title}" — 핵심 요약에 사례/데모가 없음`);
+    console.log(`  ⚠️  WARNING: "${title}" — 핵심 요약에 사례/데모가 없음`);
   }
 
   // Forbid 핵심 요약 from echoing the video title in its first paragraph.

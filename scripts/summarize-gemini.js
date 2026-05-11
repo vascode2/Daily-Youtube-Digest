@@ -188,14 +188,16 @@ Required shape:
 💡 One distinct Korean sentence with the most important claim/number/judgment.
 
 **핵심 요약**
-Intro 1-2 Korean sentences, then numbered bold subheadings with as many bullets as needed for full context.
+One Korean context sentence, then up to 3 numbered bold subheadings with exactly 1 bullet each.
 
 Rules:
 - Do not write **주요 타임라인**.
-- Do not force 3-5 points; full context matters more.
+- Keep it short. The user will not read long summaries.
+- Use maximum 3 numbered points and maximum 4 bullets total.
+- Each bullet must be one compact sentence, roughly 35-55 Korean characters when possible.
 - Include concrete names/companies/numbers/years from the transcript.
-- Include at least one example/demo/case/comparison if present.
-- For transcriptSegments, add inline timestamp links like [[12:34](https://www.youtube.com/watch?v=${item.videoId}&t=754)] across early/middle/late meaningful parts.
+- Include at most one example/demo/case/comparison, only if it changes the core meaning.
+- For transcriptSegments, add inline timestamp links like [[12:34](https://www.youtube.com/watch?v=${item.videoId}&t=754)] across early/middle/late meaningful parts, but do not list many timestamps.
 - For long videos, do not cite only the first few minutes.
 - If transcriptSegments are missing, write [자막 기반 타임라인 없음] once and do not invent timestamps.
 - Do not include views, upload date, duration, or transcript indicators.
