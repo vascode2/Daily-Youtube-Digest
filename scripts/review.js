@@ -31,23 +31,10 @@ const issues = [];
 let errorCount = 0;
 let fixCount = 0;
 
-const strippedTimelineCount = (content.match(/^\*\*주요 타임라인\*\*/gm) || []).length;
-if (strippedTimelineCount > 0) {
-  content = stripTimelineSections(content);
-  issues.push({
-    level: 'WARNING',
-    check: 'timeline_section_removed',
-    detail: `Removed ${strippedTimelineCount} separate 주요 타임라인 section(s); timestamps belong inline in 핵심 요약`,
-    fixed: true
-  });
-  fixCount += strippedTimelineCount;
-  console.log(`  🔧 Removed ${strippedTimelineCount} separate 주요 타임라인 section(s)`);
-}
-
 // Track insights across the whole digest to catch duplicates.
 const insightToTitles = new Map();
 
-const alwaysRequired = ['핵심 요약', '한 줄 인사이트'];
+const alwaysRequired = ['핵심 요약', '한 줄 인사이트', '주요 타임라인'];
 // Split on standalone --- separators (not table separators like |---|)
 // Video blocks are identified by their h2 title with a link: `## [Title](url)`
 // Channel headers (### 📺 @handle) are NOT video blocks — they're metadata
@@ -70,6 +57,7 @@ for (const block of videoBlocks) {
     }
   }
   const summaryText = extractSectionBody(block, '핵심 요약', ['주요 타임라인']);
+  const timelineText = extractSectionBody(block, '주요 타임라인');
   const summaryParagraphs = splitParagraphs(summaryText);
   // Accept either: legacy 2-3 prose paragraphs, OR new structured format
   // (intro + at least 2 numbered points like "1. **제목**" / "2. **제목**").
@@ -148,49 +136,51 @@ for (const block of videoBlocks) {
     console.log(`  🔧 Fixed timestamp format in: "${title}"`);
   }
 
-  // Inline timestamps in the structured summary body provide the jump links.
-  const inlineStampSeconds = extractInlineTimestampSeconds(summaryText);
-  const inlineStamps = inlineStampSeconds.length;
+  // 주요 타임라인 provides the jump links; 핵심 요약 can stay compact.
+  const timelineStampSeconds = extractInlineTimestampSeconds(timelineText);
+  const timelineStamps = timelineStampSeconds.length;
+  const summaryStampSeconds = extractInlineTimestampSeconds(summaryText);
+  const allStampSeconds = [...summaryStampSeconds, ...timelineStampSeconds];
 
-  if ((raw?.transcriptSegments || []).length >= 3 && inlineStamps < 3) {
-    issues.push({ level: 'ERROR', video: title, check: 'inline_timestamp_length', detail: `Expected at least 3 inline timestamps in 핵심 요약 (found ${inlineStamps})` });
+  if ((raw?.transcriptSegments || []).length >= 3 && timelineStamps !== 3) {
+    issues.push({ level: 'ERROR', video: title, check: 'timeline_timestamp_length', detail: `Expected exactly 3 timestamp links in 주요 타임라인 (found ${timelineStamps})` });
     errorCount++;
   }
 
-  if (raw?.duration && inlineStampSeconds.some(t => t > raw.duration)) {
-    issues.push({ level: 'ERROR', video: title, check: 'inline_timestamp_out_of_range', detail: '핵심 요약 contains timestamp beyond video duration' });
+  if (raw?.duration && allStampSeconds.some(t => t > raw.duration)) {
+    issues.push({ level: 'ERROR', video: title, check: 'timestamp_out_of_range', detail: 'Summary contains timestamp beyond video duration' });
     errorCount++;
   }
 
-  if (!isSorted(inlineStampSeconds)) {
-    issues.push({ level: 'WARNING', video: title, check: 'inline_timestamp_order', detail: 'Inline timestamps are not ascending' });
+  if (!isSorted(timelineStampSeconds)) {
+    issues.push({ level: 'WARNING', video: title, check: 'timeline_timestamp_order', detail: '주요 타임라인 timestamps are not ascending' });
   }
 
-  if ((raw?.transcriptSegments || []).length >= 3 && inlineStampSeconds.length > 0) {
+  if ((raw?.transcriptSegments || []).length >= 3 && timelineStampSeconds.length > 0) {
     const segmentSec = raw.transcriptSegments.map(s => parseHms(s.start));
-    const unmatched = inlineStampSeconds.filter(t => !segmentSec.some(s => Math.abs(s - t) <= 120));
+    const unmatched = timelineStampSeconds.filter(t => !segmentSec.some(s => Math.abs(s - t) <= 120));
     if (unmatched.length > 0) {
-      issues.push({ level: 'WARNING', video: title, check: 'inline_timestamp_alignment', detail: 'Some inline timestamps do not align with transcript segments (±120s)' });
+      issues.push({ level: 'WARNING', video: title, check: 'timeline_timestamp_alignment', detail: 'Some 주요 타임라인 timestamps do not align with transcript segments (±120s)' });
     }
   }
 
-  if (raw?.duration && raw.duration >= 900 && inlineStampSeconds.length >= 3) {
-    const latest = Math.max(...inlineStampSeconds);
+  if (raw?.duration && raw.duration >= 900 && timelineStampSeconds.length >= 3) {
+    const latest = Math.max(...timelineStampSeconds);
     const coverageRatio = latest / raw.duration;
     if (coverageRatio < 0.55) {
       issues.push({
         level: 'ERROR',
         video: title,
-        check: 'inline_timestamp_coverage',
-        detail: `Long video summary only cites through ${formatHms(latest)} of ${formatHms(raw.duration)}; include middle/late context`
+        check: 'timeline_timestamp_coverage',
+        detail: `Long video timeline only cites through ${formatHms(latest)} of ${formatHms(raw.duration)}; include middle/late context`
       });
       errorCount++;
     } else if (coverageRatio < 0.75) {
       issues.push({
         level: 'WARNING',
         video: title,
-        check: 'inline_timestamp_coverage',
-        detail: `Inline timestamps cover only ${Math.round(coverageRatio * 100)}% of video duration; check late-video context`
+        check: 'timeline_timestamp_coverage',
+        detail: `주요 타임라인 covers only ${Math.round(coverageRatio * 100)}% of video duration; check late-video context`
       });
     }
   }
@@ -264,12 +254,6 @@ function extractSectionBody(block, sectionTitle, nextSections = []) {
 
   const m = block.match(re);
   return m ? m[1].trim() : '';
-}
-
-function stripTimelineSections(markdown) {
-  return markdown
-    .replace(/\n\*\*주요 타임라인\*\*\s*\n[\s\S]*?(?=\n---\s*\n|\n###\s+📺|\n##\s+\[|$)/g, '\n')
-    .replace(/\n{3,}(?=\n?---)/g, '\n\n');
 }
 
 function extractInlineTimestampSeconds(text) {

@@ -25,11 +25,10 @@ Topics of interest:
 - Korean channels (e.g., @dekilab, @bitgapnam) → **Korean output**
 - English channels (e.g., @careerhackeralex, @aiDotEngineer) → **Korean summary** (translate to Korean)
 - 핵심 요약 = 도입 1문장 + **번호 매긴 굵은 소제목 최대 3개** + 각 소제목 아래 1개 sub-bullet. 짧게 읽히는 것이 우선
-- sub-bullet에는 자막에서 인용한 **구체적 인명·기업명·숫자·연도** 중 꼭 필요한 것만 넣고, 끝에 **인라인 타임스탬프** `[[HH:MM](youtube_url&t=SECONDS)]`를 붙임
-- 타임스탬프는 초반/중반/후반의 대표 지점만 포함. 긴 영상에서 5분 이전 내용만 요약하면 실패지만, 타임라인처럼 많이 나열하지 않음
+- sub-bullet에는 자막에서 인용한 **구체적 인명·기업명·숫자·연도** 중 꼭 필요한 것만 넣음
+- 주요 타임라인 = 초반/중반/후반을 대표하는 시간 링크 3개만 작성. 긴 영상에서 5분 이전 내용만 나열하면 실패
 - 핵심 요약에는 발표자가 사용한 예시/데모/비교 사례가 중요할 때만 1개 포함
 - 간단하고 정확한 한국어 선택, 블록인용 `>` 기호 사용 금지
-- **주요 타임라인 섹션은 작성하지 않음** — 타임스탬프는 핵심 요약 bullet 안의 인라인 링크로만 포함
 
 ## Structure
 ```markdown
@@ -41,7 +40,11 @@ Topics of interest:
 
 💡 한 줄 인사이트 문장
 
-핵심 요약 (단락끼리 스스로 구분, 블록인용 제거)
+**핵심 요약**
+짧은 구조화 요약
+
+**주요 타임라인**
+- [[MM:SS](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS)] 핵심 장면 한 줄
 
 ---
 
@@ -53,20 +56,20 @@ Topics of interest:
 **중요 규칙:**
 1. 채널 h3 헤딩은 반드시 YouTube 채널 링크로: `### 📺 [채널명](https://www.youtube.com/@HANDLE)`
 2. 영상 h2 헤딩은 YouTube 링크로: `## [제목](https://www.youtube.com/watch?v=VIDEO_ID)`
-3. **섹션 순서 (매우중요)**: 한 줄 인사이트 → 핵심 요약
+3. **섹션 순서 (매우중요)**: 한 줄 인사이트 → 핵심 요약 → 주요 타임라인
 4. **블록인용 제거**: 모든 `>` 기호 제거 (단락끼리 자연스럽게 구분)
-5. **주요 타임라인 섹션 금지**: 별도 타임라인을 만들지 말고 핵심 요약 bullet 끝에 인라인 타임스탬프를 붙임
+5. **주요 타임라인 작성**: 시간 링크 3개만 사용해 초반/중반/후반 대표 장면을 짧게 정리
 
 ## Rules
 - One section per channel, one subsection per video
 - If transcript is empty/very short (< 200 chars), write: `> 내용 부족 — 요약 불가 (자막/설명 없음)`
-- Timestamps must be inline links in 핵심 요약, formatted as `[[MM:SS](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS)]`
-- `transcriptSegments`가 없으면 핵심 요약에 `[자막 기반 타임라인 없음]` 문구를 1회 명시
+- Timestamps must be links in 주요 타임라인, formatted as `[[MM:SS](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS)]`
+- `transcriptSegments`가 없으면 주요 타임라인에 `[자막 기반 타임라인 없음]` 문구를 1회 명시
 - Insight (한 줄 인사이트) = exactly 1 sentence summarizing the video's most important claim/number/judgment. **No FAE-perspective or '실무 적용' boilerplate** — stay faithful to the video itself.
 - **인사이트는 영상마다 고유해야 함** — 같은 다이제스트 안의 다른 영상과 동일한 문장(또는 거의 같은 보일러플레이트) 금지
 - **핵심 요약 첫 문단을 영상 제목으로 시작하지 말 것** — 제목은 이미 h2 헤딩에 있음
 - **핵심 요약 본문에 takeaway/FAE 관점/실무 적용 같은 일반론 마무리 문장을 덧붙이지 말 것** — 영상이 실제로 말한 내용만 정리
-- 주요 타임라인 섹션은 작성하지 않음
+- 주요 타임라인 섹션은 반드시 작성하되 3개 항목으로 제한
 - 사용자가 전부 읽을 수 있도록 짧게 압축. 후반부의 새 주장, 결론, 데모 결과가 있으면 3개 항목 안에 우선 배치
 - Do NOT invent facts. If unclear, say so.
 

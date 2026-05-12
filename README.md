@@ -17,7 +17,7 @@ This project fixes that. Every morning at 7 AM:
 
 1. A computer in the cloud (not yours) wakes up.
 2. It checks each channel on your list for new videos uploaded yesterday.
-3. It reads each video's transcript and writes a structured summary with inline timestamps and a one-line takeaway.
+3. It reads each video's transcript and writes a short structured summary, a one-line takeaway, and a three-point timeline.
 4. It drops everything into a fresh page in your Notion.
 5. You wake up, open Notion, and skim the digest. Two minutes, done.
 
@@ -49,10 +49,15 @@ Generated: 07:15 GMT-4 · Channels: 3 · Videos: 6 · Errors: 0
 
    2. Tool calls during conversation
       - In the demo they swap a stock prompt for a tool-aware one and
-        add a calendar tool call mid-turn. [18:55]
+        add a calendar tool call mid-turn.
+
+   Main Timeline
+   - [04:18] WebSocket session and partial audio streaming
+   - [18:55] Calendar tool call added during the live turn
+   - [24:10] Latency and deployment trade-offs
 ```
 
-Every channel header, video title, and inline timestamp is a clickable link. Channel headers are red so you can scan fast.
+Every channel header, video title, and timeline timestamp is a clickable link. Channel headers are red so you can scan fast.
 
 ---
 

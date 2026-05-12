@@ -190,16 +190,18 @@ Required shape:
 **핵심 요약**
 One Korean context sentence, then up to 3 numbered bold subheadings with exactly 1 bullet each.
 
+**주요 타임라인**
+Exactly 3 timestamp bullets that represent early/middle/late meaningful parts.
+
 Rules:
-- Do not write **주요 타임라인**.
 - Keep it short. The user will not read long summaries.
 - Use maximum 3 numbered points and maximum 4 bullets total.
 - Each bullet must be one compact sentence, roughly 35-55 Korean characters when possible.
 - Include concrete names/companies/numbers/years from the transcript.
 - Include at most one example/demo/case/comparison, only if it changes the core meaning.
-- For transcriptSegments, add inline timestamp links like [[12:34](https://www.youtube.com/watch?v=${item.videoId}&t=754)] across early/middle/late meaningful parts, but do not list many timestamps.
+- For transcriptSegments, write exactly 3 주요 타임라인 links like [[12:34](https://www.youtube.com/watch?v=${item.videoId}&t=754)] across early/middle/late meaningful parts.
 - For long videos, do not cite only the first few minutes.
-- If transcriptSegments are missing, write [자막 기반 타임라인 없음] once and do not invent timestamps.
+- If transcriptSegments are missing, write [자막 기반 타임라인 없음] once under 주요 타임라인 and do not invent timestamps.
 - Do not include views, upload date, duration, or transcript indicators.
 - Do not add FAE/takeaway/general advice that the video did not say.
 - English source videos must still be summarized in Korean.

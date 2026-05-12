@@ -7,12 +7,12 @@ Quality-check generated summaries and auto-fix common issues before publishing.
 
 ### 1. Structure Check
 - Every summary must have: title, 핵심 요약, 한 줄 인사이트
-- Separate 주요 타임라인 sections are not allowed; timestamps must be inline links inside 핵심 요약 bullets
+- Every summary must have 주요 타임라인 after 핵심 요약
 - Missing fields → flag as ERROR, attempt to regenerate that section only
 
 ### 2. Length Check
 - 핵심 요약: intro + up to 3 numbered points, each with 1 compact sub-bullet. Prefer an executive skim over exhaustive detail
-- 핵심 요약 with transcripts: at least 3 inline timestamp links across bullets, spread across the video's actual duration
+- 주요 타임라인 with transcripts: exactly 3 timestamp links, spread across the video's actual duration
 - 한 줄 인사이트: exactly 1 sentence
 - If too short → flag as WARNING, do not block publish
 
@@ -30,8 +30,8 @@ Quality-check generated summaries and auto-fix common issues before publishing.
 - If no keyword match → add tag [키워드 미해당] at top, still include
 
 ### 5. Hallucination Guard
-- Inline timestamp links should point to the same YouTube video and use `t=SECONDS`
-- Inline timestamp seconds should align with raw `transcriptSegments` when available
+- 주요 타임라인 timestamp links should point to the same YouTube video and use `t=SECONDS`
+- 주요 타임라인 timestamp seconds should align with raw `transcriptSegments` when available
 - For longer videos, timestamps must cover early, middle, and late portions when those portions contain meaningful content
 
 ## Output
@@ -42,5 +42,4 @@ Quality-check generated summaries and auto-fix common issues before publishing.
 ## Auto-Fix Rules
 - Wrong date format → reformat
 - Missing 한 줄 인사이트 → generate from 핵심 요약
-- Remove separate 주요 타임라인 sections if generated
 - Do NOT auto-fix content accuracy issues — flag for human review
