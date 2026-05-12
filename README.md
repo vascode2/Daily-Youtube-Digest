@@ -31,7 +31,7 @@ A new Notion page every morning, looking roughly like this:
 
 ```
 📺 YouTube Digest — 2026-05-02
-Generated: 07:15 GMT-4 · Channels: 3 · Videos: 6 · Errors: 0
+Generated: 07:15 EDT · Channels: 3 · Videos: 6 · Errors: 0
 
 📺 AI Engineer  ← clickable channel link, name shown in red
 
