@@ -12,8 +12,16 @@ Automatically collect, summarize, and publish YouTube video summaries from watch
 ## Workflow Overview
 1. **Collect** (Node script) — yt-dlp fetches yesterday's videos + transcripts
 2. **Summarize** (Gemini) — `scripts/summarize-gemini.js` reads raw JSON and writes summaries following `config/format.md`
-3. **Review** (Node script) — Validates structure and auto-fixes formatting
+3. **Review** (Node script) — Validates structure, Korean output, unique insights, 3-item timelines, and timestamp coverage
 4. **Publish** (Node script) — Saves to `output/YYYY-MM-DD.md` and optionally Notion
+
+## Useful Commands
+```bash
+npm test                 # setup/pipeline smoke test
+npm run collect          # daily/yesterday collection
+npm run collect:week     # last 7 days, max 3 videos/channel
+npm run collect:channel -- @handle 10
+```
 
 ## Trigger Phrases
 
@@ -22,6 +30,9 @@ Yesterday only. Use `npm run collect` (single day).
 
 ### Weekly — "지난 일주일 요약해 줘" / "weekly digest" / "지난 7일"
 Last 7 days. Use `npm run collect:week` instead of `npm run collect`. Everything else is identical — review.js and publish.js auto-detect the latest tmp file. Notion title is auto-formatted as "Weekly Digest".
+
+### Channel — "channel digest" / "이 채널 요약해 줘"
+Use the `[MANUAL] Channel YouTube Digest` workflow or `node --env-file-if-exists=.env scripts/collect.js --channel @handle --limit 10`.
 
 When the trigger fires, execute this sequence:
 
@@ -65,8 +76,11 @@ Tell the user the output file path, channel/video counts, and any errors.
 GEMINI_API_KEY=...            # Required: Gemini summarization
 GEMINI_MODEL=gemini-3-fast    # Optional: preferred model
 GEMINI_MODEL_FALLBACKS=...    # Optional: comma-separated fallback model list
+YOUTUBE_COOKIES_B64=...        # Optional but recommended in Actions to avoid YouTube blocking
+DIGEST_TIMEZONE=America/New_York
 NOTION_TOKEN=secret_...       # Optional: enables Notion publishing
 NOTION_PAGE_ID=...            # Optional: parent page for digests
+NOTION_ROOT_TITLE=...          # Optional: parent page title override
 ```
 **No ANTHROPIC_API_KEY needed** — summarization runs through Gemini.
 
@@ -78,6 +92,6 @@ NOTION_PAGE_ID=...            # Optional: parent page for digests
 ## Output Format
 File: `output/YYYY-MM-DD.md`
 - Header with date and stats
-- One `## @channel` section per channel
-- One `### video title` per video
-- Each video follows `config/format.md` structure exactly
+- One `### 📺 [channel](...)` section per channel
+- One `## [video title](...)` section per video
+- Each video follows `config/format.md`: `한 줄 인사이트` → short `핵심 요약` → 3-link `주요 타임라인`
