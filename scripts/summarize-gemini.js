@@ -45,6 +45,18 @@ const key = path.basename(rawFile).replace(/^raw-/, '').replace(/\.json$/, '');
 const summariesFile = path.join(tmpDir, `summaries-${key}.md`);
 const rawItems = JSON.parse(fs.readFileSync(rawFile, 'utf8'));
 
+// Optional sibling file from collect.js — videos dropped because the per-channel
+// cap was reached. Rendered as a small "다른 영상" list under each channel
+// section so the user can still see what they missed without paying for a summary.
+const skippedFile = path.join(tmpDir, `skipped-${key}.json`);
+const skippedByChannel = fs.existsSync(skippedFile)
+  ? JSON.parse(fs.readFileSync(skippedFile, 'utf8'))
+  : {};
+
+// Pause between videos to stay under Gemini's free-tier 10 RPM ceiling.
+// 7s → ~8.5 RPM peak, leaves margin for the occasional retry.
+const videoDelayMs = Math.max(0, parseInt(process.env.GEMINI_VIDEO_DELAY_MS || '7000', 10));
+
 console.log(`🔎 Resolving Gemini text model, preferred: ${preferredModel}`);
 const availableModels = await listGenerateContentModels(apiKey);
 const modelCandidates = chooseModelCandidates({ preferredModel, fallbackModels, availableModels });
@@ -62,6 +74,10 @@ console.log(`   Model candidates: ${modelCandidates.join(', ')}`);
 const channelOrder = [];
 const channelSections = new Map();
 let selectedModel = null;
+// Models that returned 429 in this run — don't waste a request retrying them.
+// Each Gemini model has its own independent quota bucket, so falling through
+// to the next candidate almost always succeeds.
+const exhaustedModels = new Set();
 
 for (let index = 0; index < rawItems.length; index++) {
   const item = rawItems[index];
@@ -71,21 +87,33 @@ for (let index = 0; index < rawItems.length; index++) {
     channelOrder.push(channelKey);
     channelSections.set(channelKey, {
       heading: `### 📺 [${item.channelName || handle}](https://www.youtube.com/${handle})`,
-      videos: []
+      videos: [],
+      handle
     });
   }
 
   console.log(`\n▶️  Video ${index + 1}/${rawItems.length}: ${item.title}`);
+  if (index > 0 && videoDelayMs > 0) {
+    await delay(videoDelayMs);
+  }
   const prompt = buildVideoPrompt(item);
+  const baseCandidates = selectedModel
+    ? [selectedModel, ...modelCandidates.filter(model => model !== selectedModel)]
+    : modelCandidates;
+  const liveCandidates = baseCandidates.filter(model => !exhaustedModels.has(model));
+  if (liveCandidates.length === 0) {
+    throw new Error(`All ${modelCandidates.length} Gemini text model(s) hit quota in this run. Wait for the free-tier window to reset, enable billing, or reduce collected videos.`);
+  }
   const result = await generateVideoWithFallback({
     apiKey,
-    modelCandidates: selectedModel ? [selectedModel, ...modelCandidates.filter(model => model !== selectedModel)] : modelCandidates,
+    modelCandidates: liveCandidates,
     prompt,
-    videoTitle: item.title
+    videoTitle: item.title,
+    onModelExhausted: model => exhaustedModels.add(model)
   });
   selectedModel = result.model;
   channelSections.get(channelKey).videos.push(cleanVideoBlock(result.markdown, item));
-  fs.writeFileSync(summariesFile, renderDigest({ key, channelOrder, channelSections }));
+  fs.writeFileSync(summariesFile, renderDigest({ key, channelOrder, channelSections, skippedByChannel }));
   console.log(`   ✅ Done with ${result.model}`);
 }
 
@@ -132,7 +160,7 @@ function chooseModelCandidates({ preferredModel, fallbackModels, availableModels
   return [...explicitCandidates, ...discoveredFastModels].filter(unique);
 }
 
-async function generateVideoWithFallback({ apiKey, modelCandidates, prompt, videoTitle }) {
+async function generateVideoWithFallback({ apiKey, modelCandidates, prompt, videoTitle, onModelExhausted }) {
   const errors = [];
 
   for (const model of modelCandidates) {
@@ -155,15 +183,26 @@ async function generateVideoWithFallback({ apiKey, modelCandidates, prompt, vide
           const retryInfo = classifyGeminiError(retryErr);
           errors.push(`${model} retry: ${retryInfo.summary}`);
           console.warn(`   ⚠️  ${model} retry failed: ${retryInfo.summary}`);
-          if (retryInfo.isQuota) throw quotaError({ videoTitle, errors, retryAfterMs: retryInfo.retryAfterMs });
+          if (retryInfo.isQuota) {
+            // Mark this model as out for the rest of the run and try the next one.
+            // Each Gemini model has its own quota bucket so the next candidate
+            // (e.g. -lite, -2.0, -flash-latest) almost always still has budget.
+            if (typeof onModelExhausted === 'function') onModelExhausted(model);
+            console.warn(`   ⏭️  Marking ${model} as exhausted for this run; trying next candidate`);
+            continue;
+          }
         }
       }
 
-      if (info.isQuota) throw quotaError({ videoTitle, errors, retryAfterMs: info.retryAfterMs });
+      if (info.isQuota) {
+        if (typeof onModelExhausted === 'function') onModelExhausted(model);
+        console.warn(`   ⏭️  Marking ${model} as exhausted for this run; trying next candidate`);
+        continue;
+      }
     }
   }
 
-  throw new Error(`All Gemini text model candidates failed for "${videoTitle}".\n${errors.join('\n')}`);
+  throw quotaError({ videoTitle, errors });
 }
 
 function buildVideoPrompt(item) {
@@ -245,11 +284,19 @@ async function generateWithGemini({ apiKey, model, prompt }) {
   return text;
 }
 
-function renderDigest({ key, channelOrder, channelSections }) {
+function renderDigest({ key, channelOrder, channelSections, skippedByChannel = {} }) {
   const parts = [`# YouTube Digest — ${key}`, ''];
   for (const channelKey of channelOrder) {
     const section = channelSections.get(channelKey);
     parts.push(section.heading, '', section.videos.join('\n\n---\n\n'));
+    const skipped = skippedByChannel[section.handle];
+    if (skipped && Array.isArray(skipped.items) && skipped.items.length > 0) {
+      // Separate block (own --- fence) so review.js's per-video parser ignores it.
+      parts.push('', '---', '', '**다른 영상 (요약 안 함)**');
+      for (const v of skipped.items) {
+        parts.push(`- [${v.title}](https://www.youtube.com/watch?v=${v.videoId})`);
+      }
+    }
     parts.push('', '---', '');
   }
   return parts.join('\n').replace(/\n{4,}/g, '\n\n\n').trimEnd() + '\n';
@@ -279,14 +326,14 @@ function classifyGeminiError(err) {
   };
 }
 
-function quotaError({ videoTitle, errors, retryAfterMs }) {
+function quotaError({ videoTitle, errors, retryAfterMs = 0 }) {
   const retryText = retryAfterMs > 0 ? ` Gemini suggested retrying after ~${Math.ceil(retryAfterMs / 1000)}s.` : '';
   return new Error([
-    `Gemini quota/rate limit exhausted while summarizing "${videoTitle}".${retryText}`,
+    `Every Gemini text model in the fallback chain hit quota while summarizing "${videoTitle}".${retryText}`,
     'This is an account/quota issue, not a bad model name.',
-    'Options: wait for the free-tier quota window to reset, enable billing/increase quota, reduce collected videos, or use a different API key.',
+    'Options: wait for the free-tier quota window to reset, enable billing/increase quota, reduce collected videos (--max-per-channel), or use a different API key.',
     'Recent model attempts:',
-    ...errors.slice(-5)
+    ...errors.slice(-10)
   ].join('\n'));
 }
 

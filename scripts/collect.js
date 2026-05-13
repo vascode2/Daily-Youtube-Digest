@@ -19,7 +19,12 @@ const argv = process.argv.slice(2);
 const daysIdx = argv.indexOf('--days');
 const days = daysIdx >= 0 ? Math.max(1, parseInt(argv[daysIdx + 1], 10) || 1) : 1;
 const maxPerChannelIdx = argv.indexOf('--max-per-channel');
-const maxPerChannel = maxPerChannelIdx >= 0 ? Math.max(1, parseInt(argv[maxPerChannelIdx + 1], 10) || 0) : 0; // 0 = unlimited
+// Default cap = 3 in multi-channel mode. Keeps the daily Gemini call count
+// predictable and well under the free-tier per-minute quota. Pass
+// --max-per-channel 0 to disable, or any N to override.
+const maxPerChannel = maxPerChannelIdx >= 0
+  ? Math.max(0, parseInt(argv[maxPerChannelIdx + 1], 10) || 0)
+  : 3;
 const channelIdx = argv.indexOf('--channel');
 const singleChannel = channelIdx >= 0 ? argv[channelIdx + 1] : null;
 const limitIdx = argv.indexOf('--limit');
@@ -237,14 +242,9 @@ function fetchChannel(channel) {
 
   let matched = 0;
   let savedThisChannel = 0;
+  const skipped = []; // videos that matched the date range but were dropped because the cap was reached
 
   for (const video of videos) {
-    const cap = mode === 'channel' ? limit : maxPerChannel;
-    if (cap > 0 && savedThisChannel >= cap) {
-      push(`  🛑 Reached cap of ${cap} videos for this channel`);
-      break;
-    }
-
     const videoId = video.id;
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
@@ -267,6 +267,15 @@ function fetchChannel(channel) {
         push(`  ⏭️  Skipped (no keyword): ${video.title}`);
         continue;
       }
+    }
+
+    // Cap check happens AFTER date+keyword filters so the skipped list only
+    // contains videos that would otherwise have been summarized.
+    const cap = mode === 'channel' ? limit : maxPerChannel;
+    if (cap > 0 && savedThisChannel >= cap) {
+      skipped.push({ videoId, title: video.title || 'Untitled' });
+      push(`  ↪️  Over cap (${cap}): ${video.title}`);
+      continue;
     }
 
     let transcript = '';
@@ -316,7 +325,8 @@ function fetchChannel(channel) {
   }
 
   if (matched === 0) push(`  ⏭️  No videos in range`);
-  return { handle, videos: out, log };
+  const channelName = out[0]?.channelName || handle;
+  return { handle, channelName, videos: out, skipped, log };
 }
 
 // Tiny concurrency limiter — runs `tasks` with at most `n` in flight.
@@ -341,16 +351,32 @@ const channelResults = await runWithConcurrency(channels, concurrency, fetchChan
 
 // Print logs in original channel order so output stays readable
 const results = [];
+const skippedByChannel = {}; // { "@handle": { channelName, items: [{videoId,title}] } }
 let okChannels = 0;
 let failedChannels = 0;
+let totalSkipped = 0;
 for (const r of channelResults) {
   for (const line of r.log) console.log(line);
   results.push(...r.videos);
+  if (r.skipped && r.skipped.length > 0) {
+    skippedByChannel[r.handle] = { channelName: r.channelName || r.handle, items: r.skipped };
+    totalSkipped += r.skipped.length;
+  }
   if (r.log.some(l => l.includes('❌'))) failedChannels++;
   else okChannels++;
 }
 
 fs.writeFileSync(outputFile, JSON.stringify(results, null, 2));
+// Sibling skipped-*.json (only when there is something to record). Read by the
+// summarizer to render an "other uploads" list under each channel section.
+const skippedFile = path.join(tmpDir, `skipped-${mode === 'channel' ? channelKey : key}.json`);
+if (totalSkipped > 0) {
+  fs.writeFileSync(skippedFile, JSON.stringify(skippedByChannel, null, 2));
+  console.log(`   Skipped (over cap): ${totalSkipped} video(s) → ${path.relative(ROOT, skippedFile)}`);
+} else if (fs.existsSync(skippedFile)) {
+  // Avoid stale data from a previous run with the same key.
+  fs.unlinkSync(skippedFile);
+}
 console.log(`\n✅ Saved ${results.length} videos to ${outputFile}`);
 console.log(`   Channels: ${okChannels} ok, ${failedChannels} failed`);
 
