@@ -74,7 +74,7 @@ Tell the user the output file path, channel/video counts, and any errors.
 ## Environment Variables (optional)
 ```
 GEMINI_API_KEY=...            # Required: Gemini summarization
-GEMINI_MODEL=gemini-3-fast    # Optional: preferred model
+GEMINI_MODEL=gemini-3.5-flash # Optional: preferred model
 GEMINI_MODEL_FALLBACKS=...    # Optional: comma-separated fallback model list
 YOUTUBE_COOKIES_B64=...        # Optional but recommended in Actions to avoid YouTube blocking
 DIGEST_TIMEZONE=America/New_York

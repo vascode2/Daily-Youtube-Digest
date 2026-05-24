@@ -60,8 +60,9 @@ for (const block of videoBlocks) {
   const timelineText = extractSectionBody(block, '주요 타임라인');
   const summaryParagraphs = splitParagraphs(summaryText);
   // Accept either: legacy 2-3 prose paragraphs, OR new structured format
-  // (intro + at least 2 numbered points like "1. **제목**" / "2. **제목**").
-  const numberedHeads = (summaryText.match(/^\s*\d+\.\s+\*\*/gm) || []).length;
+  // (intro + at least 2 numbered points). Bold may wrap either the title
+  // ("1. **제목**") or the entire line ("**1. 제목**") — accept both.
+  const numberedHeads = (summaryText.match(/^\s*(?:\d+\.\s+\*\*|\*\*\d+\.\s+)/gm) || []).length;
   const isStructured = numberedHeads >= 2;
   if (!isStructured && (summaryParagraphs.length < 2 || summaryParagraphs.length > 3)) {
     issues.push({

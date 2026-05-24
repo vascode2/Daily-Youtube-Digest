@@ -13,8 +13,10 @@ const ROOT = path.join(__dirname, '..');
 const tmpDir = path.join(ROOT, 'tmp');
 
 const apiKey = process.env.GEMINI_API_KEY;
-const preferredModel = process.env.GEMINI_MODEL || 'gemini-3-fast';
+const preferredModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
 const fallbackModels = (process.env.GEMINI_MODEL_FALLBACKS || [
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
   'gemini-3-fast',
   'gemini-3-flash',
   'gemini-3-flash-preview',
@@ -227,23 +229,40 @@ Required shape:
 💡 One distinct Korean sentence with the most important claim/number/judgment.
 
 **핵심 요약**
-One Korean context sentence, then up to 3 numbered bold subheadings with exactly 1 bullet each.
+A 2-3 sentence Korean intro paragraph that frames the video's arc (who is speaking, what they argue, and how they get there), then 3-5 numbered bold subheadings, each with 1-2 sub-bullets that carry the substance.
 
 **주요 타임라인**
 Exactly 3 timestamp bullets that represent early/middle/late meaningful parts.
 
-Rules:
-- Keep it short. The user will not read long summaries.
-- Use maximum 3 numbered points and maximum 4 bullets total.
-- Each bullet must be one compact sentence, roughly 35-55 Korean characters when possible.
-- Include concrete names/companies/numbers/years from the transcript.
-- Include at most one example/demo/case/comparison, only if it changes the core meaning.
+Goal:
+- Write so a reader who has NOT watched the video understands the speaker's argument and how they build it.
+- The intro must capture the story flow, not just the topic. Avoid generic openers like "이 영상은 …을 다룬다".
+
+Length:
+- Intro paragraph: 2-3 Korean sentences.
+- Numbered points: 3 to 5 (use 4-5 when the transcript clearly supports it; do not cap at 3).
+- Each numbered point has 1 or 2 sub-bullets.
+- Total sub-bullets across all numbered points: up to 8.
+- Each sub-bullet is 1-2 sentences, roughly 60-120 Korean characters.
+
+Content rules:
+- Include concrete names, companies, numbers, years, product names from the transcript inside sub-bullets.
+- Up to 2 example/demo/case/comparison references are allowed, only when they materially change the meaning.
+- Do not echo the video title in the intro's first sentence — the title is already in the h2 above.
+- Do not add FAE perspective, takeaway lines, or general advice that the video did not actually say.
+- English source videos must still be summarized in Korean (translate proper nouns naturally; keep widely-known product names in English).
+- Do not use blockquote '>' markers anywhere.
+
+Timeline rules:
 - For transcriptSegments, write exactly 3 주요 타임라인 links like [[12:34](https://www.youtube.com/watch?v=${item.videoId}&t=754)] across early/middle/late meaningful parts.
 - For long videos, do not cite only the first few minutes.
 - If transcriptSegments are missing, write [자막 기반 타임라인 없음] once under 주요 타임라인 and do not invent timestamps.
-- Do not include views, upload date, duration, or transcript indicators.
-- Do not add FAE/takeaway/general advice that the video did not say.
-- English source videos must still be summarized in Korean.
+- Do not include views, upload date, duration, or transcript indicators anywhere.
+
+Markdown shape (important):
+- Each numbered head MUST be written as "1. **Title**" (the bold wraps only the title, NOT the number). Do NOT write "**1. Title**".
+- Each sub-bullet MUST be indented with three spaces under its numbered head, e.g. "   - bullet text". Do NOT leave sub-bullets flush left.
+- 주요 타임라인 bullets stay flush left (top-level list).
 
 Raw video JSON:
 ${JSON.stringify(video, null, 2)}
@@ -305,10 +324,44 @@ function renderDigest({ key, channelOrder, channelSections, skippedByChannel = {
 function cleanVideoBlock(markdown, item) {
   let block = cleanMarkdown(markdown);
   block = block.replace(/^#\s+[^\n]+\n+/, '').trim();
+  block = normalizeNumberedSections(block);
   if (!/^##\s+\[/.test(block)) {
     block = `## [${item.title}](https://www.youtube.com/watch?v=${item.videoId})\n\n${block}`;
   }
   return block;
+}
+
+// Gemini emits two equivalent shapes for numbered sub-headings:
+//   `1. **Title**` followed by `   * sub-bullet`  (nests correctly in Notion)
+//   `**1. Title**` followed by `* sub-bullet`     (renders flat in Notion)
+// Rewrite the second shape into the first and indent any unindented sub-bullets
+// that fall under a numbered head so the Notion converter nests them.
+function normalizeNumberedSections(markdown) {
+  const lines = markdown.split('\n');
+  const out = [];
+  let inNumberedSection = false;
+  for (let line of lines) {
+    const wrap = line.match(/^(\s*)\*\*(\d+)\.\s+(.+?)\*\*\s*$/);
+    if (wrap) line = `${wrap[1]}${wrap[2]}. **${wrap[3]}**`;
+
+    if (/^\s*\d+\.\s+\*\*/.test(line)) {
+      inNumberedSection = true;
+      out.push(line);
+      continue;
+    }
+    // Any section heading or new bold label (e.g. **주요 타임라인**) ends the numbered scope.
+    if (/^#{1,6}\s/.test(line) || /^\*\*[^*\n]+\*\*\s*$/.test(line) || /^---\s*$/.test(line)) {
+      inNumberedSection = false;
+      out.push(line);
+      continue;
+    }
+    if (inNumberedSection && /^[*-]\s+/.test(line)) {
+      out.push('   ' + line);
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join('\n');
 }
 
 function classifyGeminiError(err) {

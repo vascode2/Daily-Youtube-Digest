@@ -220,6 +220,45 @@ function markdownToNotionBlocks(md) {
   const lines = md.split('\n');
   let i = 0;
 
+  // Returns [block, linesConsumed] for a list item starting at `lines[idx]`,
+  // recursively attaching any deeper-indented bullets/items as children.
+  function parseListItem(idx, parentIndent) {
+    const raw = lines[idx];
+    const indent = raw.match(/^\s*/)[0].length;
+    const stripped = raw.slice(indent);
+    let type, content;
+    const numMatch = stripped.match(/^(\d+)\.\s+(.*)$/);
+    if (numMatch) { type = 'numbered_list_item'; content = numMatch[2]; }
+    else { type = 'bulleted_list_item'; content = stripped.replace(/^[*-]\s+/, ''); }
+
+    const children = [];
+    let j = idx + 1;
+    while (j < lines.length) {
+      const next = lines[j];
+      if (!next.trim()) { j++; continue; }
+      const nextIndent = next.match(/^\s*/)[0].length;
+      if (nextIndent <= indent) break;
+      if (/^\s*(?:[*-]|\d+\.)\s+/.test(next)) {
+        const [child, consumed] = parseListItem(j, indent);
+        children.push(child);
+        j += consumed;
+      } else {
+        // Treat indented prose as a paragraph child
+        children.push({
+          object: 'block', type: 'paragraph',
+          paragraph: { rich_text: parseRichText(next.trim()) }
+        });
+        j++;
+      }
+    }
+    const block = {
+      object: 'block', type,
+      [type]: { rich_text: parseRichText(content) }
+    };
+    if (children.length) block[type].children = children;
+    return [block, j - idx];
+  }
+
   while (i < lines.length) {
     const line = lines[i];
     const trimmed = line.trim();
@@ -240,12 +279,12 @@ function markdownToNotionBlocks(md) {
       });
       i++; continue;
     }
-    if (trimmed.startsWith('- ')) {
-      blocks.push({
-        object: 'block', type: 'bulleted_list_item',
-        bulleted_list_item: { rich_text: parseRichText(trimmed.slice(2)) }
-      });
-      i++; continue;
+    // Top-level list item: bulleted (`- ` / `* `) or numbered (`N. `).
+    if (/^\s*(?:[*-]|\d+\.)\s+/.test(line) && line.match(/^\s*/)[0].length === 0) {
+      const [block, consumed] = parseListItem(i, -1);
+      blocks.push(block);
+      i += consumed;
+      continue;
     }
     if (trimmed.startsWith('|')) {
       const tableLines = [];
