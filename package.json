@@ -10,6 +10,7 @@
     "summarize": "node --env-file-if-exists=.env scripts/summarize-gemini.js",
     "review": "node --env-file-if-exists=.env scripts/review.js",
     "publish": "node --env-file-if-exists=.env scripts/publish.js",
+    "update-docs": "node --env-file-if-exists=.env scripts/update-docs.js",
     "test": "node tests/test-pipeline.js"
   }
 }

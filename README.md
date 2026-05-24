@@ -150,6 +150,7 @@ That's it. Tomorrow at 7 AM it runs by itself.
 
 ```
 .
+├── .githooks/                  # Git hooks for automated tasks (e.g., doc updates, auto-push)
 ├── docs/index.html             # Visual walkthrough (this is what github.io serves)
 ├── CLAUDE.md                   # Project guide for local agent workflows
 ├── agents/                     # Sub-agent role definitions (collect/summarize/review/publish)
@@ -160,7 +161,8 @@ That's it. Tomorrow at 7 AM it runs by itself.
 ├── scripts/
 │   ├── collect.js              # Fetches videos with yt-dlp
 │   ├── review.js               # Quality-checks summaries
-│   └── publish.js              # Saves to Notion + repo
+│   ├── publish.js              # Saves to Notion + repo
+│   └── update-docs.js          # Updates README.md/CLAUDE.md based on staged changes
 ├── .github/workflows/
 │   ├── daily-digest.yml        # 7 AM EDT auto-cron
 │   ├── weekly-digest.yml       # On-demand weekly
@@ -180,6 +182,7 @@ That's it. Tomorrow at 7 AM it runs by itself.
 | When the daily runs | `cron:` line in `.github/workflows/daily-digest.yml` |
 | Filter videos by keyword | uncomment lines in `config/keywords.txt` |
 | Switch summarization model | `GEMINI_MODEL` / `GEMINI_MODEL_FALLBACKS` in workflow files or `.env` |
+| Skip automatic doc updates / git push | Set `SKIP_DOC_UPDATE=1` / `SKIP_AUTO_PUSH=1` before `git commit` |
 
 ---
 

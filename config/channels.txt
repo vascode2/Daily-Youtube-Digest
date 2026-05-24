@@ -12,6 +12,10 @@
 @aiDotEngineer
 @bitgapnam
 @codefundkimflip
+@yunjadong
+@builderjoshkim
+@jangpm
+
 
 # ─────────────────────
 # ─────────────────────

@@ -1,0 +1,16 @@
+#!/bin/sh
+# Post-commit: push the new commit to the current upstream branch.
+# Skip with:  SKIP_AUTO_PUSH=1 git commit ...
+if [ "$SKIP_AUTO_PUSH" = "1" ]; then
+  echo "post-commit: SKIP_AUTO_PUSH=1 → not pushing"
+  exit 0
+fi
+
+# Only push if an upstream is configured for the current branch.
+if ! git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+  echo "post-commit: no upstream configured → not pushing"
+  exit 0
+fi
+
+echo "post-commit: pushing…"
+git push || echo "post-commit: push failed (you can retry manually)"

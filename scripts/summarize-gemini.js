@@ -208,11 +208,12 @@ async function generateVideoWithFallback({ apiKey, modelCandidates, prompt, vide
 }
 
 function buildVideoPrompt(item) {
+  // Strip `title` from the JSON payload so the model can't lazily copy it.
+  // The original title is delivered ONCE, in the dedicated title-rule block.
   const video = {
     channel: item.channel,
     channelName: item.channelName,
     videoId: item.videoId,
-    title: item.title,
     duration: item.duration,
     hasTranscript: item.hasTranscript,
     transcript: item.transcript,
@@ -220,10 +221,44 @@ function buildVideoPrompt(item) {
     description: item.description || ''
   };
 
+  const transcriptSample = (item.transcript || '').slice(0, 400);
+
   return `Write ONE Korean YouTube digest video block in markdown. Return only this video block.
 
-Required shape:
-## [${item.title}](https://www.youtube.com/watch?v=${item.videoId})
+═══════════════════════════════════════════════════════════
+STEP 0 — DECIDE THE TITLE LANGUAGE (do this FIRST, before writing anything)
+═══════════════════════════════════════════════════════════
+
+Inputs you must consider:
+- Original title: ${item.title}
+- Channel name: ${item.channelName || item.channel}
+- Transcript sample (first ~400 chars): ${JSON.stringify(transcriptSample)}
+
+Decide spoken language:
+- If the transcript sample contains Hangul (한글) characters → spoken language is KOREAN.
+- If the channel name contains Hangul and transcript is empty/ambiguous → spoken language is KOREAN.
+- Otherwise → spoken language is ENGLISH (or non-Korean).
+
+Apply the title rule:
+- Spoken KOREAN + original title already Korean → use the original title as-is.
+- Spoken KOREAN + original title in English (or mixed) → TRANSLATE the title into natural Korean.
+    Keep widely-known brand/product names in English (ChatGPT, Claude, NVIDIA, GPT-4, Cursor, etc.).
+    Translate descriptive English words ("I Built", "Free Access", "Blog Agent Team", etc.).
+- Spoken ENGLISH (or any non-Korean) → KEEP the original title EXACTLY, do not translate.
+
+Worked example (this is a Korean-spoken channel with an English title):
+  Original: "[Paid Course Free Access] I Built a Blog Agent Team with Claude"
+  Channel: 데키랩 (Hangul) → Korean-spoken
+  Correct h2: ## [[유료 강의 무료 공개] Claude로 블로그 에이전트 팀을 만들었습니다](https://...)
+  WRONG h2:   ## [[Paid Course Free Access] I Built a Blog Agent Team with Claude](https://...)
+
+Do NOT add quotes around the title. Preserve any emoji from the original title.
+
+═══════════════════════════════════════════════════════════
+STEP 1 — REQUIRED SHAPE (use the title you decided in STEP 0)
+═══════════════════════════════════════════════════════════
+
+## [<TITLE_FROM_STEP_0>](https://www.youtube.com/watch?v=${item.videoId})
 
 **한 줄 인사이트**
 💡 One distinct Korean sentence with the most important claim/number/judgment.

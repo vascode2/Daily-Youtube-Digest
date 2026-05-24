@@ -10,6 +10,8 @@ Automatically collect, summarize, and publish YouTube video summaries from watch
 - Output: Markdown files + optional Notion API
 
 ## Workflow Overview
+**Note**: A git pre-commit hook automatically updates `README.md` and `CLAUDE.md` to reflect staged code changes.
+
 1. **Collect** (Node script) — yt-dlp fetches yesterday's videos + transcripts
 2. **Summarize** (Gemini) — `scripts/summarize-gemini.js` reads raw JSON and writes summaries following `config/format.md`
 3. **Review** (Node script) — Validates structure, Korean output, unique insights, 3-item timelines, and timestamp coverage
@@ -21,6 +23,7 @@ npm test                 # setup/pipeline smoke test
 npm run collect          # daily/yesterday collection
 npm run collect:week     # last 7 days, max 3 videos/channel
 npm run collect:channel -- @handle 10
+npm run update-docs      # manually update README.md/CLAUDE.md based on staged changes
 ```
 
 ## Trigger Phrases
@@ -62,7 +65,7 @@ Tell the user the output file path, channel/video counts, and any errors.
 
 ## Sub-Agent Reference Files
 - `agents/collector.md` — yt-dlp usage and data shape
-- `agents/summarizer.md` — summarization tone, audience, language rules
+- `agents/summarizer.md` — summarization tone, audience, and language rules (now includes intelligent title language decision)
 - `agents/reviewer.md` — quality checks
 - `agents/publisher.md` — output destinations
 

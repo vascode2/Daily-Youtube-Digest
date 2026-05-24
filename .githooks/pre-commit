@@ -1,0 +1,4 @@
+#!/bin/sh
+# Pre-commit: reflect staged code changes into README.md / CLAUDE.md via Gemini.
+# Never aborts the commit on its own errors.
+node "$(git rev-parse --show-toplevel)/scripts/update-docs.js" || exit 0
