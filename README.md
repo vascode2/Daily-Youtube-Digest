@@ -13,7 +13,7 @@
 
 You probably subscribe to a bunch of YouTube channels. Some upload daily. You don't have time to watch all of them. By the time you check, half the videos feel stale.
 
-This project fixes that. Every morning at 7 AM:
+This project fixes that. Every morning at 5 AM EDT / 4 AM EST:
 
 1. A computer in the cloud (not yours) wakes up.
 2. It checks each channel on your list for new videos uploaded yesterday.
@@ -75,7 +75,7 @@ GitHub Actions (the cloud runner) is also free for public repos. Notion API is f
 
 | Mode | When | How to start |
 |------|------|--------------|
-| **Daily auto-digest** | Yesterday's videos, every morning | Already on. Runs at 7 AM EDT. |
+| **Daily auto-digest** | Yesterday's videos, every morning | Already on. Runs at 5 AM EDT / 4 AM EST. |
 | **Weekly recap** | Last 7 days, on demand | Actions tab → `[MANUAL] Weekly YouTube Digest` → Run workflow |
 | **Single channel catch-up** | Specific channel, last N videos | Actions tab → `[MANUAL] Channel YouTube Digest` → enter `@handle` and number |
 
@@ -142,7 +142,7 @@ Go to https://github.com/YOUR_USERNAME/Daily-Youtube-Digest/settings/secrets/act
 ### 9. Test it
 Go to the **Actions** tab → `[AUTO] Daily YouTube Digest` → **Run workflow** → wait 5 minutes → check your Notion.
 
-That's it. Tomorrow at 7 AM it runs by itself.
+That's it. Tomorrow at 5 AM EDT / 4 AM EST it runs by itself.
 
 ---
 
@@ -164,7 +164,7 @@ That's it. Tomorrow at 7 AM it runs by itself.
 │   ├── publish.js              # Saves to Notion + repo
 │   └── update-docs.js          # Updates README.md/CLAUDE.md based on staged changes
 ├── .github/workflows/
-│   ├── daily-digest.yml        # 7 AM EDT auto-cron
+│   ├── daily-digest.yml        # 5 AM EDT / 4 AM EST auto-cron
 │   ├── weekly-digest.yml       # On-demand weekly
 │   └── channel-digest.yml      # On-demand single channel
 └── output/                     # Generated digest archive (committed to repo)
@@ -207,4 +207,4 @@ MIT. Use it, fork it, modify it.
 ## Credits
 
 - Original concept inspired by [@dekilab](https://www.youtube.com/@dekilab)'s Claude Code workflow tutorial
-- Built with Gemini, [yt-dlp](https://github.com/yt-dlp/yt-dlp), and [Notion API](https://developers.notion.com)
+- Built with Gemini, [yt-dlp](https://github.com/yt-dlp/yt-dlp), and [Notion API](https://developers.notion.so)

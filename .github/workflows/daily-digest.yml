@@ -2,8 +2,9 @@ name: '[AUTO] Daily YouTube Digest'
 
 on:
   schedule:
-    # 11:00 UTC = 07:00 EDT (summer) / 06:00 EST (winter). Runs daily.
-    - cron: '0 11 * * *'
+    # 09:00 UTC = 05:00 EDT (summer) / 04:00 EST (winter). Runs daily.
+    # GitHub cron is UTC-only (no DST), anchored to ~4am EST.
+    - cron: '0 9 * * *'
   workflow_dispatch: {}  # Manual trigger from GitHub UI
 
 permissions:
