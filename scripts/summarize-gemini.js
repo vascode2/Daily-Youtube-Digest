@@ -222,6 +222,7 @@ function buildVideoPrompt(item) {
   };
 
   const transcriptSample = (item.transcript || '').slice(0, 400);
+  const originalLanguage = (item.language || '').trim();
 
   return `Write ONE Korean YouTube digest video block in markdown. Return only this video block.
 
@@ -232,25 +233,41 @@ STEP 0 — DECIDE THE TITLE LANGUAGE (do this FIRST, before writing anything)
 Inputs you must consider:
 - Original title: ${item.title}
 - Channel name: ${item.channelName || item.channel}
+- Detected original spoken language code (from YouTube metadata, may be empty): ${JSON.stringify(originalLanguage)}
 - Transcript sample (first ~400 chars): ${JSON.stringify(transcriptSample)}
 
-Decide spoken language:
-- If the transcript sample contains Hangul (한글) characters → spoken language is KOREAN.
-- If the channel name contains Hangul and transcript is empty/ambiguous → spoken language is KOREAN.
-- Otherwise → spoken language is ENGLISH (or non-Korean).
+Decide the SPOKEN language of the video (this is the language the video was actually made in):
+1. If the metadata language code above is present, trust it FIRST:
+   - starts with "ko" → spoken language is KOREAN.
+   - starts with "en" → spoken language is ENGLISH.
+   - any other code → spoken language is OTHER (non-Korean, non-English).
+2. If the metadata language code is empty, infer from the transcript sample:
+   - Transcript sample contains Hangul (한글) → KOREAN.
+   - Transcript sample is mostly Latin/English text → ENGLISH.
+   - Transcript sample is some other script (Japanese, Chinese, Spanish, etc.) → OTHER.
+3. Only if BOTH are empty/ambiguous: if the channel name contains Hangul → KOREAN, otherwise → ENGLISH.
 
-Apply the title rule:
-- Spoken KOREAN + original title already Korean → use the original title as-is.
-- Spoken KOREAN + original title in English (or mixed) → TRANSLATE the title into natural Korean.
-    Keep widely-known brand/product names in English (ChatGPT, Claude, NVIDIA, GPT-4, Cursor, etc.).
-    Translate descriptive English words ("I Built", "Free Access", "Blog Agent Team", etc.).
-- Spoken ENGLISH (or any non-Korean) → KEEP the original title EXACTLY, do not translate.
+Apply the title rule (the title language MUST match this table — no exceptions):
+- Spoken KOREAN → the h2 title MUST be KOREAN.
+    - Original title already Korean → use it as-is.
+    - Original title in English or mixed → TRANSLATE it into natural Korean.
+      Keep widely-known brand/product names in English (ChatGPT, Claude, NVIDIA, GPT-4, Cursor, Seedance, etc.).
+      Translate the descriptive English words around them.
+- Spoken ENGLISH → KEEP the original English title EXACTLY, do not translate.
+- Spoken OTHER (any non-Korean, non-English language) → the h2 title MUST be KOREAN.
+    Translate the original title into natural Korean (keep well-known brand/product names in English).
 
-Worked example (this is a Korean-spoken channel with an English title):
-  Original: "[Paid Course Free Access] I Built a Blog Agent Team with Claude"
-  Channel: 데키랩 (Hangul) → Korean-spoken
-  Correct h2: ## [[유료 강의 무료 공개] Claude로 블로그 에이전트 팀을 만들었습니다](https://...)
-  WRONG h2:   ## [[Paid Course Free Access] I Built a Blog Agent Team with Claude](https://...)
+Worked examples:
+  A) Korean-spoken video with an English title:
+     Original: "I thought this AI-generated video was shot in real 4K (Seedance 2.0 4K)"
+     Spoken: KOREAN → Correct h2: ## [이 AI 생성 영상이 진짜 4K로 촬영된 줄 알았습니다 (Seedance 2.0 4K)](https://...)
+     WRONG h2: ## [I thought this AI-generated video was shot in real 4K (Seedance 2.0 4K)](https://...)
+  B) Korean-spoken video with an English title:
+     Original: "[Paid Course Free Access] I Built a Blog Agent Team with Claude"
+     Spoken: KOREAN → Correct h2: ## [[유료 강의 무료 공개] Claude로 블로그 에이전트 팀을 만들었습니다](https://...)
+  C) English-spoken video:
+     Original: "HERMES AGENT + Stripe + NVIDIA Nemotron"
+     Spoken: ENGLISH → Correct h2: ## [HERMES AGENT + Stripe + NVIDIA Nemotron](https://...) (keep as-is)
 
 Do NOT add quotes around the title. Preserve any emoji from the original title.
 

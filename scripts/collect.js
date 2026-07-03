@@ -198,7 +198,7 @@ const concurrency = Math.max(1, Math.min(
 console.log(`⚙️  Concurrency: ${concurrency} channel${concurrency > 1 ? 's' : ''} in parallel\n`);
 
 // Per-channel fetch — pure function, safe to run in parallel.
-function fetchChannel(channel) {
+async function fetchChannel(channel) {
   const handle = channel.startsWith('@') ? channel : `@${channel}`;
   const url = `https://www.youtube.com/${handle}/videos`;
   const out = [];
@@ -281,27 +281,40 @@ function fetchChannel(channel) {
     let transcript = '';
     let transcriptSegments = [];
     let hasTranscript = false;
+    let transcriptSource = 'description';
 
-    spawnSync('yt-dlp', [
-      ...cookieArgs,
-      '--write-auto-sub',
-      '--sub-lang', 'en,ko',
-      '--sub-format', 'vtt',
-      '--skip-download',
-      '--ignore-no-formats-error',
-      '--extractor-args', 'youtube:player_client=default,web,android,ios',
-      '--no-warnings',
-      '-o', path.join(tmpDir, `%(id)s.%(ext)s`),
-      videoUrl
-    ], { encoding: 'utf8', timeout: 60000 });
+    // Primary path: the playlist --dump-json already carries direct caption
+    // URLs (YouTube timedtext API) in `subtitles` / `automatic_captions`, plus
+    // the original spoken `language`. Fetching those URLs directly avoids a
+    // second yt-dlp call per video — the main source of HTTP 429 rate-limiting —
+    // and lets us prefer the ORIGINAL language so the transcript is a real
+    // transcription, not a machine-translation of it.
+    const candidates = buildCaptionCandidates(video);
+    for (const cand of candidates) {
+      const vtt = await fetchWithRetry(cand.url);
+      if (!vtt) continue;
+      const segs = parseVTTSegments(vtt);
+      if (segs.length < 3) continue;
+      transcriptSegments = segs;
+      transcript = segs.map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
+      if (transcript.length > 100) {
+        hasTranscript = true;
+        transcriptSource = `${cand.kind}:${cand.lang}`;
+        break;
+      }
+    }
 
-    const vttFiles = fs.readdirSync(tmpDir).filter(f => f.startsWith(videoId) && f.endsWith('.vtt'));
-    if (vttFiles.length > 0) {
-      const vttContent = fs.readFileSync(path.join(tmpDir, vttFiles[0]), 'utf8');
-      transcriptSegments = parseVTTSegments(vttContent);
-      transcript = transcriptSegments.map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
-      hasTranscript = transcriptSegments.length >= 3 && transcript.length > 100;
-      vttFiles.forEach(f => { try { fs.unlinkSync(path.join(tmpDir, f)); } catch {} });
+    // Fallback: if direct fetch produced nothing (missing/expired URLs, odd
+    // formats), let yt-dlp resolve subtitles itself — original language first,
+    // manual + auto, with retries/backoff to ride out transient rate-limits.
+    if (!hasTranscript) {
+      const fb = fetchSubsViaYtdlp(videoUrl, videoId, video.language);
+      if (fb.segments.length >= 3) {
+        transcriptSegments = fb.segments;
+        transcript = fb.text;
+        hasTranscript = fb.text.length > 100;
+        if (hasTranscript) transcriptSource = `ytdlp:${fb.lang}`;
+      }
     }
 
     const uploadDateStr = `${uploadDate.slice(0,4)}-${uploadDate.slice(4,6)}-${uploadDate.slice(6,8)}`;
@@ -311,6 +324,7 @@ function fetchChannel(channel) {
       channelName: video.channel || video.uploader || handle,
       videoId,
       title: video.title || 'Untitled',
+      language: video.language || '',
       views: video.view_count || 0,
       uploadDate: uploadDateStr,
       duration: video.duration || 0,
@@ -321,7 +335,7 @@ function fetchChannel(channel) {
     });
     savedThisChannel++;
 
-    push(`  📝 [${uploadDateStr}] ${video.title} ${hasTranscript ? '' : '(desc only)'}`);
+    push(`  📝 [${uploadDateStr}] ${video.title} ${hasTranscript ? `(${transcriptSource})` : '(desc only)'}`);
   }
 
   if (matched === 0) push(`  ⏭️  No videos in range`);
@@ -395,6 +409,117 @@ if (mode !== 'channel') {
     // Don't exit non-zero here — a genuinely quiet weekend can match this.
     // CI workflow will see "0 videos" in the summarize/publish steps and skip.
   }
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Build an ordered list of caption tracks to try, straight from the metadata
+// JSON. Preference: ORIGINAL spoken language first (so we get a true
+// transcription rather than a machine-translation), then English, then Korean.
+// Within each language, manual subtitles beat auto-generated captions.
+function buildCaptionCandidates(video) {
+  const subs = video.subtitles || {};
+  const autos = video.automatic_captions || {};
+  const order = [...new Set([video.language, 'en', 'ko'].filter(Boolean))];
+  const candidates = [];
+  const seen = new Set();
+
+  // Resolve a desired base language (e.g. "en") against a track map's keys,
+  // matching exact first then a regional variant ("en-US").
+  const resolveKey = (map, want) => {
+    if (map[want]) return want;
+    const base = want.split('-')[0];
+    return Object.keys(map).find(k => k !== 'live_chat' && k.split('-')[0] === base) || null;
+  };
+  const pushTrack = (map, want, kind) => {
+    const key = resolveKey(map, want);
+    if (!key) return;
+    const tag = `${kind}:${key}`;
+    if (seen.has(tag)) return;
+    const tracks = Array.isArray(map[key]) ? map[key] : [];
+    const best = tracks.find(t => t.ext === 'vtt') || tracks.find(t => t.url);
+    if (best && best.url) {
+      seen.add(tag);
+      candidates.push({ url: best.url, kind, lang: key });
+    }
+  };
+
+  for (const want of order) pushTrack(subs, want, 'manual');
+  for (const want of order) pushTrack(autos, want, 'auto');
+  return candidates;
+}
+
+// Fetch a caption URL with retry + backoff. YouTube's timedtext endpoint
+// occasionally answers 429/5xx under burst load; a few backed-off retries
+// recover almost all of those without hammering the server.
+async function fetchWithRetry(url, { tries = 4, timeoutMs = 30000 } = {}) {
+  for (let attempt = 0; attempt < tries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept-Language': 'en,ko;q=0.9'
+        }
+      }).finally(() => clearTimeout(timer));
+      if (res.status === 429 || res.status >= 500) {
+        await sleep(700 * (attempt + 1) + Math.floor(Math.random() * 400));
+        continue;
+      }
+      if (!res.ok) return null;
+      return await res.text();
+    } catch {
+      await sleep(500 * (attempt + 1));
+    }
+  }
+  return null;
+}
+
+// Last-resort transcript fetch: let yt-dlp resolve and download subtitles
+// itself. Used only when the direct caption URLs from metadata fail. Requests
+// the original language first (plus en/ko), manual + auto, with retries.
+function fetchSubsViaYtdlp(videoUrl, videoId, origLang) {
+  const langs = [...new Set([origLang, 'ko', 'en'].filter(Boolean))];
+  const subLangs = [...new Set(langs.flatMap(l => [l, `${l}.*`]))].join(',');
+
+  spawnSync('yt-dlp', [
+    ...cookieArgs,
+    '--write-subs',
+    '--write-auto-subs',
+    '--sub-langs', subLangs,
+    '--sub-format', 'vtt/best',
+    '--skip-download',
+    '--ignore-no-formats-error',
+    '--extractor-args', 'youtube:player_client=default,web,android,ios',
+    '--no-warnings',
+    '--retries', '5',
+    '--extractor-retries', '3',
+    '--retry-sleep', '3',
+    '-o', path.join(tmpDir, `%(id)s.%(ext)s`),
+    videoUrl
+  ], { encoding: 'utf8', timeout: 120000 });
+
+  const vttFiles = fs.readdirSync(tmpDir).filter(f => f.startsWith(videoId) && f.endsWith('.vtt'));
+  let result = { segments: [], text: '', lang: '' };
+  if (vttFiles.length > 0) {
+    // Prefer the original-language file if yt-dlp wrote several.
+    const preferred = origLang
+      ? (vttFiles.find(f => f.includes(`.${origLang}.`)) || vttFiles[0])
+      : vttFiles[0];
+    try {
+      const vttContent = fs.readFileSync(path.join(tmpDir, preferred), 'utf8');
+      const segments = parseVTTSegments(vttContent);
+      const text = segments.map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
+      const langMatch = preferred.match(new RegExp(`^${videoId}\\.([^.]+)\\.vtt$`));
+      result = { segments, text, lang: langMatch ? langMatch[1] : (origLang || 'unknown') };
+    } catch {}
+    vttFiles.forEach(f => { try { fs.unlinkSync(path.join(tmpDir, f)); } catch {} });
+  }
+  return result;
 }
 
 function parseVTTSegments(vtt) {

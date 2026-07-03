@@ -95,38 +95,28 @@ if (notionToken && notionPageId) {
         ? `📺 Weekly Digest ${startStr} ~ ${endStr}`
         : `📺 ${endStr}`;
 
-    const firstBatch = blocks.slice(0, 100);
-    const restBatches = [];
-    for (let i = 100; i < blocks.length; i += 100) {
-      restBatches.push(blocks.slice(i, i + 100));
+    // De-dup: archive any existing child page(s) with the same title so re-runs
+    // don't pile up duplicate date pages.
+    try {
+      const children = await listChildBlocks(notionPageId, notionToken);
+      const dupes = children.filter(b => b.type === 'child_page' && childPageTitle(b) === notionTitle);
+      for (const dup of dupes) {
+        await archiveBlock(dup.id, notionToken);
+        console.log(`   🗑️  Archived existing page "${notionTitle}"`);
+      }
+    } catch (err) {
+      console.log(`   ⚠️  Dedup skipped: ${err.message}`);
     }
 
-    const createRes = await fetch('https://api.notion.com/v1/pages', {
-      method: 'POST',
-      headers: notionHeaders(notionToken),
-      body: JSON.stringify({
-        parent: { page_id: notionPageId },
-        properties: { title: { title: [{ text: { content: notionTitle } }] } },
-        children: firstBatch
-      })
+    // Insert as a plain child page at the TOP of the parent so the newest digest
+    // appears first (position:page_start requires Notion-Version 2026-03-11).
+    const createdPage = await createDigestPage({
+      parentPageId: notionPageId,
+      title: notionTitle,
+      blocks,
+      position: { type: 'page_start' },
+      token: notionToken
     });
-
-    if (!createRes.ok) {
-      const err = await createRes.text();
-      throw new Error(`${createRes.status}: ${err}`);
-    }
-
-    const createdPage = await createRes.json();
-    const newPageId = createdPage.id;
-
-    for (const batch of restBatches) {
-      const r = await fetch(`https://api.notion.com/v1/blocks/${newPageId}/children`, {
-        method: 'PATCH',
-        headers: notionHeaders(notionToken),
-        body: JSON.stringify({ children: batch })
-      });
-      if (!r.ok) console.error(`   ⚠️  Append failed: ${r.status}`);
-    }
 
     notionUrl = createdPage.url;
     console.log(`   ✅ Notion: ${notionUrl}`);
@@ -166,8 +156,86 @@ function notionHeaders(token) {
   return {
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json',
-    'Notion-Version': '2022-06-28'
+    // 2026-03-11 introduced the `position` object (insert at page_start/end/
+    // after_block), which we use to keep the newest digest page on top.
+    'Notion-Version': process.env.NOTION_VERSION || '2026-03-11'
   };
+}
+
+// List all direct child blocks of a page/block (paginated).
+async function listChildBlocks(blockId, token) {
+  const out = [];
+  let cursor;
+  do {
+    const url = new URL(`https://api.notion.com/v1/blocks/${blockId}/children`);
+    url.searchParams.set('page_size', '100');
+    if (cursor) url.searchParams.set('start_cursor', cursor);
+    const res = await fetch(url.toString(), { method: 'GET', headers: notionHeaders(token) });
+    if (!res.ok) throw new Error(`List children failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
+    const json = await res.json();
+    out.push(...(json.results || []));
+    cursor = json.has_more ? json.next_cursor : null;
+  } while (cursor);
+  return out;
+}
+
+// Plain-text title of a child_page block.
+function childPageTitle(block) {
+  if (block?.type !== 'child_page') return null;
+  return block.child_page?.title || '';
+}
+
+// Archive (soft-delete) a block by id.
+async function archiveBlock(blockId, token) {
+  const res = await fetch(`https://api.notion.com/v1/blocks/${blockId}`, {
+    method: 'DELETE',
+    headers: notionHeaders(token)
+  });
+  if (!res.ok) throw new Error(`Archive failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
+}
+
+// Create a digest page under a parent page from already-converted blocks.
+// `position` is an optional Notion position object, e.g. { type: 'page_start' }.
+// Falls back gracefully (no position) if the API rejects the position param.
+async function createDigestPage({ parentPageId, title, blocks, position, token }) {
+  const firstBatch = blocks.slice(0, 100);
+  const restBatches = [];
+  for (let i = 100; i < blocks.length; i += 100) restBatches.push(blocks.slice(i, i + 100));
+
+  const body = {
+    parent: { page_id: parentPageId },
+    properties: { title: { title: [{ text: { content: title } }] } },
+    children: firstBatch
+  };
+  if (position) body.position = position;
+
+  let res = await fetch('https://api.notion.com/v1/pages', {
+    method: 'POST', headers: notionHeaders(token), body: JSON.stringify(body)
+  });
+
+  // If the position parameter is unsupported, retry once without it.
+  if (!res.ok && position) {
+    const errText = await res.text();
+    if (res.status === 400 && /position/i.test(errText)) {
+      console.log(`   ⚠️  position param rejected (${errText.slice(0, 150)}); creating without ordering.`);
+      delete body.position;
+      res = await fetch('https://api.notion.com/v1/pages', {
+        method: 'POST', headers: notionHeaders(token), body: JSON.stringify(body)
+      });
+    } else {
+      throw new Error(`${res.status}: ${errText}`);
+    }
+  }
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+
+  const page = await res.json();
+  for (const batch of restBatches) {
+    const r = await fetch(`https://api.notion.com/v1/blocks/${page.id}/children`, {
+      method: 'PATCH', headers: notionHeaders(token), body: JSON.stringify({ children: batch })
+    });
+    if (!r.ok) console.error(`   ⚠️  Append failed: ${r.status}`);
+  }
+  return page;
 }
 
 function formatGeneratedTime(date, timeZone) {

@@ -5,7 +5,7 @@ Format final summaries and deliver to output destinations.
 
 ## Output Destinations
 1. **Local file** (always): `output/YYYY-MM-DD.md`
-2. **Notion** (if NOTION_TOKEN and NOTION_PAGE_ID env vars are set): create child page
+2. **Notion** (if NOTION_TOKEN and NOTION_PAGE_ID env vars are set): one plain child page per digest, newest on top
 
 ## Local File Format
 ```markdown
@@ -23,13 +23,32 @@ Format final summaries and deliver to output destinations.
 ---
 ```
 
-## Notion Page Structure
-- Parent: NOTION_PAGE_ID
-- Parent page title: `Youtbue Digest` (auto-updated by publish step)
-- New daily child page title: `YYYY-MM-DD` (date only)
-- Weekly child page title: `📺 Weekly Digest YYYY-MM-DD ~ YYYY-MM-DD`
-- Content: same as local file, converted to Notion block format
-- Use Notion API: POST /v1/pages
+## Notion Structure (plain child pages, newest-on-top)
+Each digest is a **plain child page** directly under NOTION_PAGE_ID. New pages are
+inserted at the **top** of the parent so the newest digest is always first — the
+same structure used by the sibling Daily-News-Digest project.
+
+How newest-on-top works: `pages.create` accepts a `position` object
+(Notion-Version `2026-03-11`). Passing `position: { type: 'page_start' }` inserts
+the new child page at the **top** of the parent (older `pages.create` calls without
+`position` append at the bottom). `createDigestPage()` sends this on every publish,
+with a graceful fallback that retries without `position` if the API ever rejects it.
+
+- Page title:
+  - Daily:   `📺 YYYY-MM-DD`
+  - Weekly:  `📺 Weekly Digest YYYY-MM-DD ~ YYYY-MM-DD`
+  - Channel: `📺 Channel Digest: @handle (YYYY-MM-DD)`
+- De-duplication: before inserting, existing `child_page` blocks with the **same
+  title** are archived (soft-deleted), so re-running publish on the same digest
+  never duplicates.
+- API version: `2026-03-11` (required for the `position` param).
+- Implemented directly in `scripts/publish.js`
+  (`listChildBlocks` → dedup → `createDigestPage` with `position: page_start`).
+
+### One-time migration
+`scripts/migrate-db-to-pages.js` performed a one-time conversion from the previous
+inline database (`📺 YouTube Digests`) back into flat, newest-on-top child pages,
+then deleted the database. It is not part of the recurring pipeline.
 
 ## Rules
 - Always write local file first; Notion is optional
