@@ -13,9 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45  # 영상 30+개 처리 가능 시간
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      # v5 runs on Node.js 24; v4 emits the GitHub Actions Node.js 20 deprecation warning.
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
 
