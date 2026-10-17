@@ -12,6 +12,90 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 const tmpDir = path.join(ROOT, 'tmp');
 
+const COPILOT_ENDPOINT = 'https://api.githubcopilot.com';
+
+function getCopilotConfig() {
+  const token = process.env.COPILOT_API_TOKEN || process.env.GH_TOKEN;
+  if (!token) return null;
+  const models = (process.env.COPILOT_MODEL || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+  if (models.length === 0) return null;
+  return { token, models };
+}
+
+// Chat completions (OpenAI-compatible) against the Copilot API. Authenticated
+// with a GitHub OAuth/PAT token tied to a Copilot subscription.
+async function callCopilot(model, prompt, token, timeoutMs) {
+  const response = await fetch(`${COPILOT_ENDPOINT}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/json',
+      'Editor-Version': 'vscode/1.99.0',
+      'Editor-Plugin-Version': 'copilot-chat/1.250.0'
+    },
+    signal: AbortSignal.timeout(timeoutMs),
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.35,
+      max_tokens: 2048
+    })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    const error = new Error(`Copilot API failed (${response.status}): ${compactErrorText(text)}`);
+    error.status = response.status;
+    error.retryAfterMs = Math.ceil(parseFloat(response.headers.get('retry-after') || '0') * 1000);
+    error.body = text;
+    throw error;
+  }
+
+  const data = await response.json();
+  const text = data?.choices?.[0]?.message?.content?.trim();
+  if (!text) throw new Error('Copilot API returned no text.');
+  return text;
+}
+
+/**
+ * Try the Copilot model chain first (when configured): each model is retried
+ * once on 429 honoring Retry-After, and the chain advances to the next model
+ * on 429 (exhausted twice), 404, the unsupported-model 400, or 5xx. Falls
+ * through to the Gemini Chain when no Copilot candidate works.
+ */
+async function generateWithCopilot({ prompt, copilot }) {
+  const errors = [];
+  for (const model of copilot.models) {
+    try {
+      console.log(`   Trying model: copilot/${model}`);
+      const markdown = await callCopilot(model, prompt, copilot.token, copilotTimeoutMs);
+      return { markdown, model: `copilot/${model}` };
+    } catch (err) {
+      const summary = `${err.status || 'ERR'} ${String(err.message || '').slice(0, 300)}`;
+      errors.push(`copilot/${model}: ${summary}`);
+      console.warn(`   ⚠️  copilot/${model} failed: ${summary}`);
+      if (err.status === 429 && err.retryAfterMs > 0 && err.retryAfterMs <= 65000) {
+        await delay(err.retryAfterMs + 250);
+        try {
+          const markdown = await callCopilot(model, prompt, copilot.token, copilotTimeoutMs);
+          return { markdown, model: `copilot/${model}` };
+        } catch (retryErr) {
+          errors.push(`copilot/${model} retry: ${String(retryErr.message || '').slice(0, 300)}`);
+          console.warn(`   ⚠️  copilot/${model} retry failed`);
+        }
+      }
+    }
+  }
+  console.warn(`   ↪️  Copilot chain failed (${errors[errors.length - 1] || 'empty'}); falling back to Gemini.`);
+  return null;
+}
+
+const copilotTimeoutMs = Math.max(0, parseInt(process.env.COPILOT_REQUEST_TIMEOUT_MS || '120000', 10));
+
 const apiKey = process.env.GEMINI_API_KEY;
 const preferredModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
 const fallbackModels = (process.env.GEMINI_MODEL_FALLBACKS || [
@@ -32,8 +116,9 @@ const fallbackModels = (process.env.GEMINI_MODEL_FALLBACKS || [
   .map(model => model.trim())
   .filter(Boolean);
 
-if (!apiKey) {
-  console.error('❌ GEMINI_API_KEY is required for Gemini summarization.');
+const copilotConfig = getCopilotConfig();
+if (!apiKey && !copilotConfig) {
+  console.error('❌ GEMINI_API_KEY or COPILOT_API_TOKEN (or GH_TOKEN) is required for summarization.');
   process.exit(1);
 }
 
@@ -59,19 +144,25 @@ const skippedByChannel = fs.existsSync(skippedFile)
 // 7s → ~8.5 RPM peak, leaves margin for the occasional retry.
 const videoDelayMs = Math.max(0, parseInt(process.env.GEMINI_VIDEO_DELAY_MS || '7000', 10));
 
-console.log(`🔎 Resolving Gemini text model, preferred: ${preferredModel}`);
-const availableModels = await listGenerateContentModels(apiKey);
+console.log(`🔎 Resolving model chain, preferred: copilot=${copilotConfig ? 'configured' : 'off'}, gemini=${preferredModel}`);
+let availableModels = [];
+try {
+  availableModels = apiKey ? await listGenerateContentModels(apiKey) : [];
+} catch (err) {
+  if (!copilotConfig) throw err;
+  console.warn(`⚠️  Gemini ListModels failed (${err.message.slice(0, 200)}); continuing with the Copilot chain only.`);
+}
 const modelCandidates = chooseModelCandidates({ preferredModel, fallbackModels, availableModels });
 
-if (modelCandidates.length === 0) {
-  console.error('❌ No Gemini text models that support generateContent are available for this API key.');
+if (modelCandidates.length === 0 && !copilotConfig) {
+  console.error('❌ No model providers configured: Copilot chain is off and no Gemini text models that support generateContent are available for this API key.');
   console.error('   Check the API key, billing/quota, and Google AI Studio model access.');
   process.exit(1);
 }
 
 console.log(`🧠 Summarizing ${rawItems.length} video(s)`);
 console.log(`   Raw: ${path.relative(ROOT, rawFile)}`);
-console.log(`   Model candidates: ${modelCandidates.join(', ')}`);
+console.log(`   Model candidates: ${copilotConfig ? copilotConfig.models.map(m => `copilot/${m}`).join(', ') + (modelCandidates.length ? ', ' : '') : ''}${modelCandidates.join(', ')}`);
 
 const channelOrder = [];
 const channelSections = new Map();
@@ -102,17 +193,27 @@ for (let index = 0; index < rawItems.length; index++) {
   const baseCandidates = selectedModel
     ? [selectedModel, ...modelCandidates.filter(model => model !== selectedModel)]
     : modelCandidates;
-  const liveCandidates = baseCandidates.filter(model => !exhaustedModels.has(model));
-  if (liveCandidates.length === 0) {
-    throw new Error(`All ${modelCandidates.length} Gemini text model(s) hit quota in this run. Wait for the free-tier window to reset, enable billing, or reduce collected videos.`);
+  // Gemini-only candidates retain the selected-model fast-path; copilot/* is
+  // retried each video through the same Copilot chain (cheap, no quota bucket).
+  const geminiBase = baseCandidates.filter(model => !model.startsWith('copilot/'));
+  const liveCandidates = geminiBase.filter(model => !exhaustedModels.has(model));
+  if (liveCandidates.length === 0 && !copilotConfig) {
+    throw new Error(`All ${geminiBase.length} Gemini text model(s) hit quota in this run. Wait for the free-tier window to reset, enable billing, or reduce collected videos.`);
   }
-  const result = await generateVideoWithFallback({
-    apiKey,
-    modelCandidates: liveCandidates,
+
+  let result = copilotConfig ? await generateWithCopilot({
     prompt,
-    videoTitle: item.title,
-    onModelExhausted: model => exhaustedModels.add(model)
-  });
+    copilot: copilotConfig
+  }) : null;
+  if (!result) {
+    result = await generateVideoWithFallback({
+      apiKey,
+      modelCandidates: liveCandidates,
+      prompt,
+      videoTitle: item.title,
+      onModelExhausted: model => exhaustedModels.add(model)
+    });
+  }
   selectedModel = result.model;
   channelSections.get(channelKey).videos.push(cleanVideoBlock(result.markdown, item));
   fs.writeFileSync(summariesFile, renderDigest({ key, channelOrder, channelSections, skippedByChannel }));
