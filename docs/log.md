@@ -10,4 +10,4 @@ Format: dated entries, `- Did:` / `- Decision: … (reason: …)` / `- Assessmen
 - Decision: run it on GitHub Actions rather than locally (reason: everything happens in the cloud, no computer or local drive has to be on).
 - Decision: start with Gemini, then try other models (reason: Gemini was free and worked well, but other models should be compared).
 - Assessment: the pipeline works, but the habit does not yet. English study and the digest are the morning routine; when I sleep late I skip it, and that is mine to fix.
-- Note (verified 2026-10-24): the workflows summarize with Gemini `gemini-3.5-flash` and a fallback chain; on 2026-05-10 they were switched to Claude Sonnet and back to Gemini the same day.
+- Note (verified 2026-10-24): the summarizer is Copilot-first since 2026-10-16 — `COPILOT_MODEL` = `claude-sonnet-5.5`, `claude-haiku-5.5`, `gpt-4o-mini` — with Gemini `gemini-3.5-flash` as the fallback chain; the 2026-10-24 run used `copilot/claude-sonnet-5.5`. Earlier history: Claude Sonnet on 2026-05-10, back to Gemini the same day.
