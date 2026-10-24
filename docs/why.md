@@ -12,9 +12,9 @@ Watching the video matters when the content is inherently visual. For technical 
 
 ## Decisions
 
-- **Gemini first.** It was free and worked well. I want to try other models too.
+- **Gemini first, Copilot now.** Gemini was free and worked well. Since 2026-10-16 the summarizer tries a GitHub Copilot model chain first (`claude-sonnet-5.5`, `claude-haiku-5.5`, `gpt-4o-mini`) and falls back to Gemini (`gemini-3.5-flash` and its chain) when Copilot fails or is rate-limited.
+- **Keys as GitHub Actions secrets.** The Copilot token, the Gemini key, the Notion token and page ID, and the YouTube cookies live there; no key is kept on a machine.
 - **GitHub Actions, not a local machine.** Everything runs in the cloud, so neither my computer nor a local drive has to be on. That is one of the best parts of the setup.
-- **Keys as GitHub Actions secrets.** The Notion token and the model API key live there; no key is kept on a machine.
 - **Notion as the destination.** The digest lands directly in my own notes, which makes it easy to read.
 
 ## The part I still have to fix
